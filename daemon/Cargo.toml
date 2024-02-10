@@ -1,5 +1,6 @@
 [package]
 name = "daemon"
+edition = "2021"
 version.workspace = true
 authors.workspace = true
 description.workspace = true
@@ -7,3 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 tonic.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+proto = { path = "../proto" }
+tonic-reflection = "0.11.0"

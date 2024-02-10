@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package backend;
+
+service Backend {
+  rpc Name(NameRequest) returns (NameReply) {}
+}
+
+message NameRequest {
+  string name = 1;
+}
+
+message NameReply {
+  string name = 1;
+}

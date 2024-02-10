@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package control;
+
+service Control {
+  rpc Init(InitRequest) returns (InitReply) {}
+}
+
+message InitRequest {
+  string name = 1;
+}
+
+message InitReply {
+  string name = 1;
+}
