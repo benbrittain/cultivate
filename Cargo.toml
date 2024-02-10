@@ -1,9 +1,12 @@
-[package]
-name = "cultivate"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["daemon"]
+resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.package]
+authors = ["Benjamin Brittain <ben@brittain.org>"]
+description = "cultivate your code"
+version = "0.0.1"
+documentation = "https://thelastyak.com/cultivate"
 
-[dependencies]
+[workspace.dependencies]
 tonic = "0.11.0"
