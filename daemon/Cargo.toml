@@ -12,3 +12,4 @@ tokio.workspace = true
 tokio-stream.workspace = true
 proto = { path = "../proto" }
 tonic-reflection = "0.11.0"
+anyhow = "1.0.79"

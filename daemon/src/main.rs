@@ -1,5 +1,7 @@
-use tonic::transport::Server;
-use tonic::{Request, Response, Status};
+use tonic::{
+    transport::Server,
+    Request, Response, Status,
+};
 
 use proto::{
     backend_server::{Backend, BackendServer},
@@ -28,8 +30,8 @@ impl Control for ControlService {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:10000".parse().unwrap();
+async fn main() -> Result<(), anyhow::Error> {
+    let addr = "[::1]:10000".parse()?;
 
     let control = ControlService {};
     let control_svc = ControlServer::new(control);
