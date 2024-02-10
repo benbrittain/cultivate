@@ -6,6 +6,9 @@ description.workspace = true
 version.workspace = true
 documentation.workspace = true
 
+[lib]
+path = "lib.rs"
+
 [dependencies]
 tonic.workspace = true
 prost.workspace = true

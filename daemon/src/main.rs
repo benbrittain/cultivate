@@ -1,42 +1,17 @@
-use tonic::{
-    transport::Server,
-    Request, Response, Status,
-};
+use tonic::transport::Server;
 
-use proto::{
-    backend_server::{Backend, BackendServer},
-    control_server::{Control, ControlServer},
-    InitReply, InitRequest, NameReply, NameRequest,
-};
+use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 
-#[derive(Debug)]
-struct BackendService;
-
-#[tonic::async_trait]
-impl Backend for BackendService {
-    async fn name(&self, _request: Request<NameRequest>) -> Result<Response<NameReply>, Status> {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug)]
-struct ControlService;
-
-#[tonic::async_trait]
-impl Control for ControlService {
-    async fn init(&self, _request: Request<InitRequest>) -> Result<Response<InitReply>, Status> {
-        unimplemented!()
-    }
-}
+mod service;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let addr = "[::1]:10000".parse()?;
 
-    let control = ControlService {};
+    let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    let backend = BackendService {};
+    let backend = service::backend::BackendService {};
     let backend_svc = BackendServer::new(backend);
 
     let reflection_svc = tonic_reflection::server::Builder::configure()

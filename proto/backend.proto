@@ -3,13 +3,66 @@ syntax = "proto3";
 package backend;
 
 service Backend {
-  rpc Name(NameRequest) returns (NameReply) {}
+  rpc Concurrency(ConcurrencyRequest) returns (ConcurrencyReply) {}
+  rpc WriteFile(WriteFileRequest) returns (WriteFileReply) {}
+  rpc ReadFile(ReadFileRequest) returns (ReadFileReply) {}
+  rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
+  rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
+  rpc WriteTree(WriteTreeRequest) returns (WriteTreeReply) {}
+  rpc ReadTree(ReadTreeRequest) returns (ReadTreeReply) {}
+  rpc WriteCommit(WriteCommitRequest) returns (WriteCommitReply) {}
+  rpc ReadCommit(ReadCommitRequest) returns (ReadCommitReply) {}
 }
 
-message NameRequest {
-  string name = 1;
+message ConcurrencyRequest {}
+message ConcurrencyReply {
+  int32 estimated_concurrency = 1;
 }
 
-message NameReply {
-  string name = 1;
+// File
+
+message WriteFileRequest {
+  string path = 1;
 }
+message WriteFileReply {}
+
+message ReadFileRequest {
+  string path = 1;
+}
+message ReadFileReply {}
+
+// Symlink
+
+message WriteSymlinkRequest {
+  string path = 1;
+}
+message WriteSymlinkReply {}
+
+message ReadSymlinkRequest {
+  string path = 1;
+}
+message ReadSymlinkReply {}
+
+// Tree
+
+message WriteTreeRequest {
+  string path = 1;
+}
+message WriteTreeReply {}
+
+message ReadTreeRequest {
+  string path = 1;
+}
+message ReadTreeReply {}
+
+// Commit
+
+message WriteCommitRequest {
+  string path = 1;
+}
+message WriteCommitReply {}
+
+message ReadCommitRequest {
+  string path = 1;
+}
+message ReadCommitReply {}
