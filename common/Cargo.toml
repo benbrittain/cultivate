@@ -1,0 +1,12 @@
+[package]
+name = "common"
+edition = "2021"
+authors.workspace = true
+description.workspace = true
+version.workspace = true
+documentation.workspace = true
+
+[dependencies]
+blake3.workspace = true
+digest.workspace = true
+jj-lib.workspace = true

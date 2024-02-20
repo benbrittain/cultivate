@@ -1,5 +1,5 @@
 [workspace]
-members = ["daemon", "proto", "cli"]
+members = ["daemon", "proto", "cli", "common"]
 resolver = "2"
 
 [workspace.package]
@@ -14,3 +14,9 @@ prost = "0.12"
 tokio-stream = "0.1.14"
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.77"
+blake3 = {version = "1.5", features = ["traits-preview"] }
+digest = {version = "*" }
+jj-lib = { path = "../jj/lib" }
+jj-cli = { path = "../jj/cli" }
+proto = { path = "./proto" }
+common = { path = "./common" }

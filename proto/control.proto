@@ -4,6 +4,7 @@ package control;
 
 service Control {
   rpc Init(InitRequest) returns (InitReply) {}
+  rpc Status(StatusRequest) returns (StatusReply) {}
 }
 
 message InitRequest {
@@ -11,5 +12,11 @@ message InitRequest {
 }
 
 message InitReply {
+  string name = 1;
+}
+
+message StatusRequest {}
+
+message StatusReply {
   string name = 1;
 }

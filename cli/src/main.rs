@@ -8,6 +8,7 @@ use jj_lib::{
 };
 
 mod backend;
+mod blocking_client;
 use backend::CultivateBackend;
 
 #[derive(Debug, Clone, clap::Subcommand)]
@@ -37,7 +38,8 @@ fn create_store_factories() -> StoreFactories {
     store_factories.add_backend(
         "cultivate",
         Box::new(|settings, store_path| {
-            Ok(Box::new(CultivateBackend::load(settings, store_path)?))
+            todo!()
+            //       Ok(Box::new(CultivateBackend::load(settings, store_path)?))
         }),
     );
     store_factories
@@ -57,7 +59,7 @@ fn run_cultivate_command(
             Workspace::init_with_backend(
                 command_helper.settings(),
                 wc_path,
-                &|settings, store_path| Ok(Box::new(CultivateBackend::init(settings, store_path)?)),
+                &|settings, store_path| Ok(Box::new(CultivateBackend::new(settings, store_path)?)),
                 Signer::from_settings(command_helper.settings())
                     .map_err(WorkspaceInitError::SignInit)?,
             )?;
