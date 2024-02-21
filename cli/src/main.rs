@@ -1,13 +1,14 @@
-use jj_cli::cli_util::{CliRunner, CommandError, CommandHelper};
-use jj_cli::ui::Ui;
-
-use jj_lib::workspace::default_working_copy_factory;
-use jj_lib::workspace::default_working_copy_factories;
+use jj_cli::{
+    cli_util::{CliRunner, CommandError, CommandHelper},
+    ui::Ui,
+};
 use jj_lib::{
     op_store::WorkspaceId,
     repo::{ReadonlyRepo, StoreFactories},
     signing::Signer,
-    workspace::{Workspace, WorkspaceInitError},
+    workspace::{
+        default_working_copy_factories, default_working_copy_factory, Workspace, WorkspaceInitError,
+    },
 };
 
 mod backend;

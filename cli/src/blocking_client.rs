@@ -1,9 +1,9 @@
+use std::sync::{Arc, Mutex};
+
 use proto::backend::{
     backend_client::BackendClient, Commit, CommitId, File, FileId, GetEmptyTreeIdReq, Tree, TreeId,
 };
 use tokio::runtime::{Builder, Runtime};
-
-use std::sync::{Arc, Mutex};
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;

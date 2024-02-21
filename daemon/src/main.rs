@@ -1,6 +1,5 @@
-use tonic::transport::Server;
-
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
+use tonic::transport::Server;
 
 mod service;
 

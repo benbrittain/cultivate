@@ -1,9 +1,11 @@
-use prost::Message;
-use std::collections::HashMap;
-use tonic::{Request, Response, Status};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-use proto::{backend::backend_server::Backend, backend::*};
-use std::sync::{Arc, Mutex};
+use prost::Message;
+use proto::backend::{backend_server::Backend, *};
+use tonic::{Request, Response, Status};
 
 const COMMIT_ID_LENGTH: usize = 32;
 const CHANGE_ID_LENGTH: usize = 16;
@@ -124,8 +126,9 @@ impl Backend for BackendService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use assert_matches::assert_matches;
+
+    use super::*;
 
     #[tokio::test]
     async fn write_commit_parents() {

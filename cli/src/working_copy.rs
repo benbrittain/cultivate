@@ -1,24 +1,21 @@
- use std::any::Any;
- use jj_lib::backend::MergedTreeId;
- use jj_lib::working_copy::ResetError;
- use jj_lib::working_copy::CheckoutError;
- use jj_lib::repo_path::RepoPathBuf;
- use jj_lib::commit::Commit;
- use itertools::Itertools;
- use jj_lib::working_copy::CheckoutStats;
- use jj_lib::working_copy::SnapshotOptions;
- use jj_lib::working_copy::LockedWorkingCopy;
- use jj_lib::working_copy::SnapshotError;
- use std::path::Path;
-use jj_lib::op_store::OperationId;
-use jj_lib::working_copy::WorkingCopy;
-use jj_lib::working_copy::WorkingCopyStateError;
+use std::{
+    any::Any,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use jj_lib::op_store::WorkspaceId;
-use jj_lib::store::Store;
-use jj_lib::working_copy::WorkingCopyFactory;
-use std::path::PathBuf;
-use std::sync::Arc;
+use itertools::Itertools;
+use jj_lib::{
+    backend::MergedTreeId,
+    commit::Commit,
+    op_store::{OperationId, WorkspaceId},
+    repo_path::RepoPathBuf,
+    store::Store,
+    working_copy::{
+        CheckoutError, CheckoutStats, LockedWorkingCopy, ResetError, SnapshotError,
+        SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
+    },
+};
 
 pub struct CultivateWorkingCopyFactory {}
 
@@ -70,7 +67,7 @@ impl CultivateWorkingCopy {
         operation_id: OperationId,
         workspace_id: WorkspaceId,
     ) -> Result<Self, WorkingCopyStateError> {
-  //      let inner = todo!();
+        //      let inner = todo!();
         //let inner = LocalWorkingCopy::init(
         //    store,
         //    working_copy_path,
@@ -84,7 +81,7 @@ impl CultivateWorkingCopy {
     }
 
     fn load(store: Arc<Store>, working_copy_path: PathBuf, state_path: PathBuf) -> Self {
- //       let inner = LocalWorkingCopy::load(store, working_copy_path, state_path);
+        //       let inner = LocalWorkingCopy::load(store, working_copy_path, state_path);
         CultivateWorkingCopy {
 //            inner: Box::new(inner),
         }
@@ -155,7 +152,6 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
 
     fn old_tree_id(&self) -> &MergedTreeId {
         self.inner.old_tree_id()
-
     }
 
     fn snapshot(&mut self, mut options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {

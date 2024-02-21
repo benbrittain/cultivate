@@ -1,28 +1,26 @@
-use std::any::Any;
-use std::io::Cursor;
-use std::io::Read;
-use std::path::Path;
-use std::time::SystemTime;
+use std::{
+    any::Any,
+    io::{Cursor, Read},
+    path::Path,
+    time::SystemTime,
+};
 
 use async_trait::async_trait;
-
-use jj_lib::backend::{
-    make_root_commit, Backend, BackendError, BackendInitError, BackendResult, ChangeId, Commit,
-    CommitId, Conflict, ConflictId, FileId, MillisSinceEpoch, Signature, SigningFn, SymlinkId,
-    Timestamp, Tree, TreeId, TreeValue,
+use jj_lib::{
+    backend::{
+        make_root_commit, Backend, BackendError, BackendInitError, BackendResult, ChangeId, Commit,
+        CommitId, Conflict, ConflictId, FileId, MergedTreeId, MillisSinceEpoch, SecureSig,
+        Signature, SigningFn, SymlinkId, Timestamp, Tree, TreeId, TreeValue,
+    },
+    index::Index,
+    merge::MergeBuilder,
+    object_id::ObjectId,
+    repo_path::{RepoPath, RepoPathComponentBuf},
+    settings::UserSettings,
 };
-use jj_lib::index::Index;
-use jj_lib::repo_path::{RepoPath, RepoPathComponentBuf};
-
-use jj_lib::backend::MergedTreeId;
-use jj_lib::backend::SecureSig;
-use jj_lib::merge::MergeBuilder;
-use jj_lib::object_id::ObjectId;
-use jj_lib::settings::UserSettings;
+use prost::Message;
 
 use crate::blocking_client::BlockingBackendClient;
-
-use prost::Message;
 
 const COMMIT_ID_LENGTH: usize = 32;
 const CHANGE_ID_LENGTH: usize = 16;

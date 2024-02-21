@@ -1,7 +1,5 @@
+use proto::control::{control_server::Control, InitReply, InitRequest, StatusReply, StatusRequest};
 use tonic::{Request, Response, Status};
-
-use proto::control::{control_server::Control, InitReply, InitRequest};
-use proto::control::{StatusReply, StatusRequest};
 
 #[derive(Debug)]
 pub struct ControlService;
