@@ -472,6 +472,7 @@ dependencies = [
  "async-trait",
  "clap",
  "common",
+ "itertools 0.12.1",
  "jj-cli",
  "jj-lib",
  "prost",

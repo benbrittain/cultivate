@@ -1,8 +1,8 @@
 use std::any::Any;
+use std::io::Cursor;
 use std::io::Read;
 use std::path::Path;
 use std::time::SystemTime;
-use std::io::Cursor;
 
 use async_trait::async_trait;
 
@@ -108,11 +108,11 @@ impl Backend for CultivateBackend {
     }
 
     async fn read_symlink(&self, _path: &RepoPath, _id: &SymlinkId) -> BackendResult<String> {
-        todo!()
+        todo!("Support symlink")
     }
 
     fn write_symlink(&self, _path: &RepoPath, _target: &str) -> BackendResult<SymlinkId> {
-        todo!()
+        todo!("Support symlink")
     }
 
     async fn read_tree(&self, _path: &RepoPath, id: &TreeId) -> BackendResult<Tree> {
@@ -132,11 +132,11 @@ impl Backend for CultivateBackend {
     }
 
     fn read_conflict(&self, _path: &RepoPath, _id: &ConflictId) -> BackendResult<Conflict> {
-        todo!()
+        todo!("Support conflict")
     }
 
     fn write_conflict(&self, _path: &RepoPath, _contents: &Conflict) -> BackendResult<ConflictId> {
-        todo!()
+        todo!("Support conflict")
     }
 
     async fn read_commit(&self, id: &CommitId) -> BackendResult<Commit> {

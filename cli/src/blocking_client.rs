@@ -1,5 +1,5 @@
 use proto::backend::{
-    backend_client::BackendClient, Commit, CommitId, GetEmptyTreeIdReq, Tree, TreeId, File, FileId
+    backend_client::BackendClient, Commit, CommitId, File, FileId, GetEmptyTreeIdReq, Tree, TreeId,
 };
 use tokio::runtime::{Builder, Runtime};
 

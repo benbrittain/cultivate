@@ -1,15 +1,20 @@
 use jj_cli::cli_util::{CliRunner, CommandError, CommandHelper};
 use jj_cli::ui::Ui;
 
+use jj_lib::workspace::default_working_copy_factory;
+use jj_lib::workspace::default_working_copy_factories;
 use jj_lib::{
-    repo::StoreFactories,
+    op_store::WorkspaceId,
+    repo::{ReadonlyRepo, StoreFactories},
     signing::Signer,
     workspace::{Workspace, WorkspaceInitError},
 };
 
 mod backend;
 mod blocking_client;
+mod working_copy;
 use backend::CultivateBackend;
+use working_copy::{CultivateWorkingCopy, CultivateWorkingCopyFactory};
 
 #[derive(Debug, Clone, clap::Subcommand)]
 enum CultivateCommands {
@@ -56,13 +61,18 @@ fn run_cultivate_command(
         CultivateCommands::Status => todo!(),
         CultivateCommands::Init => {
             let wc_path = command_helper.cwd();
-            // Initialize a workspace with the custom backend
-            Workspace::init_with_backend(
+            Workspace::init_with_factories(
                 command_helper.settings(),
                 wc_path,
                 &|settings, store_path| Ok(Box::new(CultivateBackend::new(settings, store_path)?)),
                 Signer::from_settings(command_helper.settings())
                     .map_err(WorkspaceInitError::SignInit)?,
+                ReadonlyRepo::default_op_store_initializer(),
+                ReadonlyRepo::default_op_heads_store_initializer(),
+                ReadonlyRepo::default_index_store_initializer(),
+                ReadonlyRepo::default_submodule_store_initializer(),
+                &CultivateWorkingCopyFactory {},
+                WorkspaceId::default(),
             )?;
             Ok(())
         }
@@ -70,8 +80,14 @@ fn run_cultivate_command(
 }
 
 fn main() -> std::process::ExitCode {
+    let mut working_copy_factories = default_working_copy_factories();
+    working_copy_factories.insert(
+        CultivateWorkingCopy::name().to_owned(),
+        Box::new(CultivateWorkingCopyFactory {}),
+    );
     CliRunner::init()
         .set_store_factories(create_store_factories())
+        .set_working_copy_factories(working_copy_factories)
         .add_subcommand(run_cultivate_command)
         .run()
 }
