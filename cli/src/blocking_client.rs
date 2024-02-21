@@ -1,12 +1,10 @@
-use proto::backend::{backend_client::BackendClient, Commit, WriteCommitReply};
+use proto::backend::{backend_client::BackendClient, Commit, CommitId};
 use tokio::runtime::{Builder, Runtime};
 
 use std::sync::{Arc, Mutex};
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;
-
-//pub type BlockingBackendClientRef = std::sync::Arc<std::sync::Mutex<BlockingBackendClient>>;
 
 // The order of the fields in this struct is important. They must be ordered
 // such that when `BlockingBackendClient` is dropped the client is dropped
@@ -33,8 +31,16 @@ impl BlockingBackendClient {
     pub fn write_commit(
         &self,
         request: impl tonic::IntoRequest<Commit>,
-    ) -> Result<tonic::Response<WriteCommitReply>, tonic::Status> {
+    ) -> Result<tonic::Response<CommitId>, tonic::Status> {
         let mut client = self.client.lock().unwrap();
         self.rt.block_on(client.write_commit(request))
+    }
+
+    pub fn read_commit(
+        &self,
+        request: impl tonic::IntoRequest<CommitId>,
+    ) -> Result<tonic::Response<Commit>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.read_commit(request))
     }
 }

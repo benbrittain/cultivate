@@ -1,9 +1,24 @@
+use prost::Message;
+use std::{
+    collections::HashMap,
+};
 use tonic::{Request, Response, Status};
 
 use proto::{backend::backend_server::Backend, backend::*};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
-pub struct BackendService;
+pub struct BackendService {
+    commits: Arc<Mutex<HashMap<Vec<u8>, Commit>>>,
+}
+
+impl BackendService {
+    pub fn new() -> Self {
+        BackendService {
+            commits: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
 
 #[tonic::async_trait]
 impl Backend for BackendService {
@@ -49,18 +64,20 @@ impl Backend for BackendService {
     ) -> Result<Response<ReadTreeReply>, Status> {
         todo!()
     }
-    async fn write_commit(
-        &self,
-        request: Request<Commit>,
-    ) -> Result<Response<WriteCommitReply>, Status> {
-        dbg!(request);
-        let reply = WriteCommitReply {};
-        Ok(Response::new(reply))
+    async fn write_commit(&self, request: Request<Commit>) -> Result<Response<CommitId>, Status> {
+        let commit = request.into_inner();
+        dbg!(&commit);
+        let commit_id = blake3::hash(&commit.encode_to_vec()).as_bytes().to_vec();
+        let mut commits = self.commits.lock().unwrap();
+        commits.insert(commit_id.clone(), commit);
+        Ok(Response::new(CommitId { commit_id }))
     }
-    async fn read_commit(
-        &self,
-        _request: Request<ReadCommitRequest>,
-    ) -> Result<Response<ReadCommitReply>, Status> {
-        todo!()
+
+    async fn read_commit(&self, request: Request<CommitId>) -> Result<Response<Commit>, Status> {
+        let commit_id = request.into_inner();
+        dbg!(&commit_id);
+        let commits = self.commits.lock().unwrap();
+        let commit = commits.get(&commit_id.commit_id).unwrap();
+        Ok(Response::new(commit.clone()))
     }
 }

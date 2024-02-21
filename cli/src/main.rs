@@ -38,8 +38,9 @@ fn create_store_factories() -> StoreFactories {
     store_factories.add_backend(
         "cultivate",
         Box::new(|settings, store_path| {
-            todo!()
-            //       Ok(Box::new(CultivateBackend::load(settings, store_path)?))
+            Ok(Box::new(
+                CultivateBackend::new(settings, store_path).unwrap(),
+            ))
         }),
     );
     store_factories

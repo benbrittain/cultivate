@@ -10,8 +10,9 @@ service Backend {
   rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
   rpc WriteTree(WriteTreeRequest) returns (WriteTreeReply) {}
   rpc ReadTree(ReadTreeRequest) returns (ReadTreeReply) {}
-  rpc WriteCommit(Commit) returns (WriteCommitReply) {}
-  rpc ReadCommit(ReadCommitRequest) returns (ReadCommitReply) {}
+
+  rpc WriteCommit(Commit) returns (CommitId) {}
+  rpc ReadCommit(CommitId) returns (Commit) {}
 }
 
 message ConcurrencyRequest {}
@@ -81,16 +82,9 @@ message Tree {
 
 // Commit
 
-message WriteCommitRequest {
-  string path = 1;
-  Commit commit = 2;
+message CommitId {
+  bytes commit_id = 1;
 }
-message WriteCommitReply {}
-
-message ReadCommitRequest {
-  string path = 1;
-}
-message ReadCommitReply {}
 
 message Commit {
   repeated bytes parents = 1;

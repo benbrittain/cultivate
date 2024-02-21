@@ -1,17 +1,16 @@
 use std::any::Any;
 use std::io::Read;
-use std::path::{Path};
+use std::path::Path;
 use std::time::SystemTime;
 
-use common::blake3_hash;
 
 
 use async_trait::async_trait;
 
 use jj_lib::backend::{
-    make_root_commit, Backend, BackendError, BackendInitError, BackendResult,
-    ChangeId, Commit, CommitId, Conflict, ConflictId, FileId, MillisSinceEpoch, Signature,
-    SigningFn, SymlinkId, Timestamp, Tree, TreeId,
+    make_root_commit, Backend, BackendError, BackendInitError, BackendResult, ChangeId, Commit,
+    CommitId, Conflict, ConflictId, FileId, MillisSinceEpoch, Signature, SigningFn, SymlinkId,
+    Timestamp, Tree, TreeId,
 };
 use jj_lib::index::Index;
 
@@ -43,7 +42,7 @@ impl CultivateBackend {
         "cultivate"
     }
 
-    pub fn new(settings: &UserSettings, store_path: &Path) -> Result<Self, BackendInitError> {
+    pub fn new(_settings: &UserSettings, _store_path: &Path) -> Result<Self, BackendInitError> {
         let root_commit_id = CommitId::from_bytes(&[0; COMMIT_ID_LENGTH]);
         let root_change_id = ChangeId::from_bytes(&[0; CHANGE_ID_LENGTH]);
         let empty_tree_id = TreeId::from_hex("482ae5a29fbe856c7272f2071b8b0f0359ee2d89ff392b8a900643fbd0836eccd067b8bf41909e206c90d45d6e7d8b6686b93ecaee5fe1a9060d87b672101310");
@@ -56,27 +55,6 @@ impl CultivateBackend {
             empty_tree_id,
         })
     }
-
-    //pub fn init(handle: Handle, settings: &UserSettings, store_path: &Path) -> Result<Self, BackendInitError> {
-    //    let backend = Self::load(handle, settings, store_path).unwrap();
-    //    Ok(backend)
-    //}
-
-    //pub fn load(handle: Handle, _settings: &UserSettings, store_path: &Path) -> Result<Self, BackendLoadError> {
-    //    let client = handle.spawn(async {
-    //        BackendClient::connect("http://[::1]:10000").await
-    //    });
-
-    ////let mut client = rt
-    ////    .map_err(internal_error)?;
-    ////client
-    //    Ok(CultivateBackend {
-    //        path: store_path.to_path_buf(),
-    //        root_commit_id,
-    //        root_change_id,
-    //        empty_tree_id,
-    //    })
-    //}
 }
 
 #[async_trait]
@@ -152,7 +130,12 @@ impl Backend for CultivateBackend {
                 self.empty_tree_id.clone(),
             ));
         }
-        todo!()
+        let proto = self
+            .client
+            .read_commit(commit_id_to_proto(id))
+            .unwrap()
+            .into_inner();
+        Ok(commit_from_proto(proto))
     }
 
     fn write_commit(
@@ -169,10 +152,9 @@ impl Backend for CultivateBackend {
             ));
         }
         let proto = commit_to_proto(&commit);
-        let id = CommitId::new(blake3_hash(&commit).to_vec());
-
-        self.client.write_commit(proto);
-        Ok((id, commit))
+        let id = self.client.write_commit(proto).unwrap();
+        let id = id.into_inner();
+        Ok((CommitId::new(id.commit_id), commit))
     }
 
     fn gc(&self, _index: &dyn Index, _keep_newer: SystemTime) -> BackendResult<()> {
@@ -180,6 +162,11 @@ impl Backend for CultivateBackend {
     }
 }
 
+pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::backend::CommitId {
+    let mut proto = proto::backend::CommitId::default();
+    proto.commit_id = commit_id.to_bytes();
+    proto
+}
 pub fn commit_to_proto(commit: &Commit) -> proto::backend::Commit {
     let mut proto = proto::backend::Commit::default();
     for parent in &commit.parents {
