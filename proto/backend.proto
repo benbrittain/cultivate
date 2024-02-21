@@ -4,10 +4,11 @@ package backend;
 
 service Backend {
   rpc Concurrency(ConcurrencyRequest) returns (ConcurrencyReply) {}
-  rpc WriteFile(WriteFileRequest) returns (WriteFileReply) {}
-  rpc ReadFile(ReadFileRequest) returns (ReadFileReply) {}
   rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
   rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
+
+  rpc WriteFile(File) returns (FileId) {}
+  rpc ReadFile(FileId) returns (File) {}
 
   rpc GetEmptyTreeId(GetEmptyTreeIdReq) returns (TreeId) {}
   rpc WriteTree(Tree) returns (TreeId) {}
@@ -26,15 +27,13 @@ message ConcurrencyReply {
 
 // File
 
-message WriteFileRequest {
-  string path = 1;
+message FileId {
+  bytes file_id = 1;
 }
-message WriteFileReply {}
 
-message ReadFileRequest {
-  string path = 1;
+message File {
+  bytes data = 1;
 }
-message ReadFileReply {}
 
 // Symlink
 

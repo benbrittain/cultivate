@@ -16,6 +16,7 @@ tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.77"
 blake3 = {version = "1.5", features = ["traits-preview"] }
 digest = {version = "*" }
+zstd = {version = "0.13.0" }
 jj-lib = { path = "../jj/lib" }
 jj-cli = { path = "../jj/cli" }
 proto = { path = "./proto" }

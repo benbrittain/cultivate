@@ -1,5 +1,5 @@
 use proto::backend::{
-    backend_client::BackendClient, Commit, CommitId, GetEmptyTreeIdReq, Tree, TreeId,
+    backend_client::BackendClient, Commit, CommitId, GetEmptyTreeIdReq, Tree, TreeId, File, FileId
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -44,6 +44,22 @@ impl BlockingBackendClient {
     ) -> Result<tonic::Response<Commit>, tonic::Status> {
         let mut client = self.client.lock().unwrap();
         self.rt.block_on(client.read_commit(request))
+    }
+
+    pub fn write_file(
+        &self,
+        request: impl tonic::IntoRequest<File>,
+    ) -> Result<tonic::Response<FileId>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.write_file(request))
+    }
+
+    pub fn read_file(
+        &self,
+        request: impl tonic::IntoRequest<FileId>,
+    ) -> Result<tonic::Response<File>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.read_file(request))
     }
 
     pub fn write_tree(

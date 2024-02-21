@@ -5,16 +5,20 @@ use tonic::{Request, Response, Status};
 use proto::{backend::backend_server::Backend, backend::*};
 use std::sync::{Arc, Mutex};
 
+type Id = Vec<u8>;
+
 #[derive(Debug)]
 pub struct BackendService {
-    commits: Arc<Mutex<HashMap<Vec<u8>, Commit>>>,
-    trees: Arc<Mutex<HashMap<Vec<u8>, Tree>>>,
+    commits: Arc<Mutex<HashMap<Id, Commit>>>,
+    trees: Arc<Mutex<HashMap<Id, Tree>>>,
+    files: Arc<Mutex<HashMap<Id, File>>>,
     empty_tree_id: Vec<u8>,
 }
 
 impl BackendService {
     pub fn new() -> Self {
         let commits = Arc::new(Mutex::new(HashMap::new()));
+        let files = Arc::new(Mutex::new(HashMap::new()));
         let (empty_tree_id, trees) = {
             let mut trees = HashMap::new();
             let tree = Tree::default();
@@ -26,6 +30,7 @@ impl BackendService {
             empty_tree_id,
             commits,
             trees,
+            files,
         }
     }
 }
@@ -45,24 +50,37 @@ impl Backend for BackendService {
     ) -> Result<Response<ConcurrencyReply>, Status> {
         todo!()
     }
+
     async fn write_file(
         &self,
-        _request: Request<WriteFileRequest>,
-    ) -> Result<Response<WriteFileReply>, Status> {
-        todo!()
+        request: Request<File>,
+    ) -> Result<Response<FileId>, Status> {
+        let file = request.into_inner();
+        let file_id = blake3::hash(&file.encode_to_vec()).as_bytes().to_vec();
+        dbg!(&file_id);
+        let mut files = self.files.lock().unwrap();
+        files.insert(file_id.clone(), file);
+        Ok(Response::new(FileId { file_id }))
     }
+
     async fn read_file(
         &self,
-        _request: Request<ReadFileRequest>,
-    ) -> Result<Response<ReadFileReply>, Status> {
-        todo!()
+        request: Request<FileId>,
+    ) -> Result<Response<File>, Status> {
+        let file_id = request.into_inner();
+        println!("{:x?}", &file_id);
+        let files = self.files.lock().unwrap();
+        let file = files.get(&file_id.file_id).unwrap();
+        Ok(Response::new(file.clone()))
     }
+
     async fn write_symlink(
         &self,
         _request: Request<WriteSymlinkRequest>,
     ) -> Result<Response<WriteSymlinkReply>, Status> {
         todo!()
     }
+
     async fn read_symlink(
         &self,
         _request: Request<ReadSymlinkRequest>,

@@ -2,6 +2,7 @@ use std::any::Any;
 use std::io::Read;
 use std::path::Path;
 use std::time::SystemTime;
+use std::io::Cursor;
 
 use async_trait::async_trait;
 
@@ -44,7 +45,6 @@ impl CultivateBackend {
         let root_commit_id = CommitId::from_bytes(&[0; COMMIT_ID_LENGTH]);
         let root_change_id = ChangeId::from_bytes(&[0; CHANGE_ID_LENGTH]);
         let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
-
         let empty_tree_id =
             TreeId::from_bytes(&client.get_empty_tree_id().unwrap().into_inner().tree_id);
 
@@ -91,12 +91,20 @@ impl Backend for CultivateBackend {
         1
     }
 
-    async fn read_file(&self, _path: &RepoPath, _id: &FileId) -> BackendResult<Box<dyn Read>> {
-        todo!()
+    async fn read_file(&self, _path: &RepoPath, id: &FileId) -> BackendResult<Box<dyn Read>> {
+        let proto = self
+            .client
+            .read_file(file_id_to_proto(id))
+            .unwrap()
+            .into_inner();
+        Ok(file_from_proto(proto))
     }
 
-    fn write_file(&self, _path: &RepoPath, _contents: &mut dyn Read) -> BackendResult<FileId> {
-        todo!()
+    fn write_file(&self, _path: &RepoPath, contents: &mut dyn Read) -> BackendResult<FileId> {
+        let proto = file_to_proto(contents);
+        let id = self.client.write_file(proto).unwrap();
+        let id = id.into_inner();
+        Ok(FileId::new(id.file_id))
     }
 
     async fn read_symlink(&self, _path: &RepoPath, _id: &SymlinkId) -> BackendResult<String> {
@@ -168,6 +176,12 @@ impl Backend for CultivateBackend {
     fn gc(&self, _index: &dyn Index, _keep_newer: SystemTime) -> BackendResult<()> {
         todo!()
     }
+}
+
+pub fn file_id_to_proto(file_id: &FileId) -> proto::backend::FileId {
+    let mut proto = proto::backend::FileId::default();
+    proto.file_id = file_id.to_bytes();
+    proto
 }
 
 pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::backend::CommitId {
@@ -258,6 +272,14 @@ fn signature_from_proto(proto: proto::backend::commit::Signature) -> Signature {
     }
 }
 
+fn file_to_proto(file: &mut dyn Read) -> proto::backend::File {
+    let mut proto = proto::backend::File::default();
+    let mut out = vec![];
+    zstd::stream::copy_encode(file, &mut out, 0).unwrap();
+    proto.data = out;
+    proto
+}
+
 fn tree_to_proto(tree: &Tree) -> proto::backend::Tree {
     let mut proto = proto::backend::Tree::default();
     for entry in tree.entries() {
@@ -294,6 +316,12 @@ fn tree_value_to_proto(value: &TreeValue) -> proto::backend::TreeValue {
         }
     }
     proto
+}
+
+fn file_from_proto(proto: proto::backend::File) -> Box<dyn Read> {
+    let mut file = vec![];
+    zstd::stream::copy_decode(proto.data.as_slice(), &mut file).unwrap();
+    Box::new(Cursor::new(file))
 }
 
 fn tree_from_proto(proto: proto::backend::Tree) -> Tree {
