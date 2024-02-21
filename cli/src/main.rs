@@ -72,7 +72,9 @@ fn run_cultivate_command(
                 ReadonlyRepo::default_op_heads_store_initializer(),
                 ReadonlyRepo::default_index_store_initializer(),
                 ReadonlyRepo::default_submodule_store_initializer(),
-                &CultivateWorkingCopyFactory {},
+                &*default_working_copy_factory(),
+                // TODO switch to cultivate working copy
+                //&CultivateWorkingCopyFactory {},
                 WorkspaceId::default(),
             )?;
             Ok(())

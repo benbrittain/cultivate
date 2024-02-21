@@ -61,11 +61,11 @@ impl CultivateWorkingCopy {
     }
 
     fn init(
-        store: Arc<Store>,
-        working_copy_path: PathBuf,
-        state_path: PathBuf,
-        operation_id: OperationId,
-        workspace_id: WorkspaceId,
+        _store: Arc<Store>,
+        _working_copy_path: PathBuf,
+        _state_path: PathBuf,
+        _operation_id: OperationId,
+        _workspace_id: WorkspaceId,
     ) -> Result<Self, WorkingCopyStateError> {
         //      let inner = todo!();
         //let inner = LocalWorkingCopy::init(
@@ -80,7 +80,7 @@ impl CultivateWorkingCopy {
         })
     }
 
-    fn load(store: Arc<Store>, working_copy_path: PathBuf, state_path: PathBuf) -> Self {
+    fn load(_store: Arc<Store>, _working_copy_path: PathBuf, _state_path: PathBuf) -> Self {
         //       let inner = LocalWorkingCopy::load(store, working_copy_path, state_path);
         CultivateWorkingCopy {
 //            inner: Box::new(inner),
@@ -192,7 +192,7 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
         self: Box<Self>,
         operation_id: OperationId,
     ) -> Result<Box<dyn WorkingCopy>, WorkingCopyStateError> {
-        let inner = self.inner.finish(operation_id)?;
+        let _inner = self.inner.finish(operation_id)?;
         Ok(Box::new(CultivateWorkingCopy {
        //     inner
         }))

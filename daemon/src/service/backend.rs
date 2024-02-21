@@ -7,9 +7,6 @@ use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
 
-const COMMIT_ID_LENGTH: usize = 32;
-const CHANGE_ID_LENGTH: usize = 16;
-
 type Id = Vec<u8>;
 
 #[derive(Debug)]
@@ -49,6 +46,7 @@ impl Backend for BackendService {
         let tree_id = self.empty_tree_id.clone();
         Ok(Response::new(TreeId { tree_id }))
     }
+
     async fn concurrency(
         &self,
         _request: Request<ConcurrencyRequest>,
@@ -126,6 +124,9 @@ impl Backend for BackendService {
 
 #[cfg(test)]
 mod tests {
+    const COMMIT_ID_LENGTH: usize = 32;
+    const CHANGE_ID_LENGTH: usize = 16;
+
     use assert_matches::assert_matches;
 
     use super::*;
