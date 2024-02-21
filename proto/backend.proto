@@ -8,12 +8,16 @@ service Backend {
   rpc ReadFile(ReadFileRequest) returns (ReadFileReply) {}
   rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
   rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
-  rpc WriteTree(WriteTreeRequest) returns (WriteTreeReply) {}
-  rpc ReadTree(ReadTreeRequest) returns (ReadTreeReply) {}
+
+  rpc GetEmptyTreeId(GetEmptyTreeIdReq) returns (TreeId) {}
+  rpc WriteTree(Tree) returns (TreeId) {}
+  rpc ReadTree(TreeId) returns (Tree) {}
 
   rpc WriteCommit(Commit) returns (CommitId) {}
   rpc ReadCommit(CommitId) returns (Commit) {}
 }
+
+message GetEmptyTreeIdReq {}
 
 message ConcurrencyRequest {}
 message ConcurrencyReply {
@@ -46,16 +50,9 @@ message ReadSymlinkReply {}
 
 // Tree
 
-message WriteTreeRequest {
-  string path = 1;
+message TreeId {
+  bytes tree_id = 1;
 }
-
-message WriteTreeReply {}
-
-message ReadTreeRequest {
-  string path = 1;
-}
-message ReadTreeReply {}
 
 message TreeValue {
   message File {

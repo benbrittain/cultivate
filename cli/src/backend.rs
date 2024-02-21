@@ -3,22 +3,20 @@ use std::io::Read;
 use std::path::Path;
 use std::time::SystemTime;
 
-
-
 use async_trait::async_trait;
 
 use jj_lib::backend::{
     make_root_commit, Backend, BackendError, BackendInitError, BackendResult, ChangeId, Commit,
     CommitId, Conflict, ConflictId, FileId, MillisSinceEpoch, Signature, SigningFn, SymlinkId,
-    Timestamp, Tree, TreeId,
+    Timestamp, Tree, TreeId, TreeValue,
 };
 use jj_lib::index::Index;
+use jj_lib::repo_path::{RepoPath, RepoPathComponentBuf};
 
 use jj_lib::backend::MergedTreeId;
 use jj_lib::backend::SecureSig;
 use jj_lib::merge::MergeBuilder;
 use jj_lib::object_id::ObjectId;
-use jj_lib::repo_path::RepoPath;
 use jj_lib::settings::UserSettings;
 
 use crate::blocking_client::BlockingBackendClient;
@@ -45,8 +43,10 @@ impl CultivateBackend {
     pub fn new(_settings: &UserSettings, _store_path: &Path) -> Result<Self, BackendInitError> {
         let root_commit_id = CommitId::from_bytes(&[0; COMMIT_ID_LENGTH]);
         let root_change_id = ChangeId::from_bytes(&[0; CHANGE_ID_LENGTH]);
-        let empty_tree_id = TreeId::from_hex("482ae5a29fbe856c7272f2071b8b0f0359ee2d89ff392b8a900643fbd0836eccd067b8bf41909e206c90d45d6e7d8b6686b93ecaee5fe1a9060d87b672101310");
         let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+
+        let empty_tree_id =
+            TreeId::from_bytes(&client.get_empty_tree_id().unwrap().into_inner().tree_id);
 
         Ok(CultivateBackend {
             client,
@@ -107,12 +107,20 @@ impl Backend for CultivateBackend {
         todo!()
     }
 
-    async fn read_tree(&self, _path: &RepoPath, _id: &TreeId) -> BackendResult<Tree> {
-        todo!()
+    async fn read_tree(&self, _path: &RepoPath, id: &TreeId) -> BackendResult<Tree> {
+        let proto = self
+            .client
+            .read_tree(tree_id_to_proto(id))
+            .unwrap()
+            .into_inner();
+        Ok(tree_from_proto(proto))
     }
 
-    fn write_tree(&self, _path: &RepoPath, _contents: &Tree) -> BackendResult<TreeId> {
-        todo!()
+    fn write_tree(&self, _path: &RepoPath, tree: &Tree) -> BackendResult<TreeId> {
+        let proto = tree_to_proto(tree);
+        let id = self.client.write_tree(proto).unwrap();
+        let id = id.into_inner();
+        Ok(TreeId::new(id.tree_id))
     }
 
     fn read_conflict(&self, _path: &RepoPath, _id: &ConflictId) -> BackendResult<Conflict> {
@@ -167,6 +175,13 @@ pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::backend::CommitId {
     proto.commit_id = commit_id.to_bytes();
     proto
 }
+
+pub fn tree_id_to_proto(tree_id: &TreeId) -> proto::backend::TreeId {
+    let mut proto = proto::backend::TreeId::default();
+    proto.tree_id = tree_id.to_bytes();
+    proto
+}
+
 pub fn commit_to_proto(commit: &Commit) -> proto::backend::Commit {
     let mut proto = proto::backend::Commit::default();
     for parent in &commit.parents {
@@ -240,5 +255,70 @@ fn signature_from_proto(proto: proto::backend::commit::Signature) -> Signature {
             timestamp: MillisSinceEpoch(timestamp.millis_since_epoch),
             tz_offset: timestamp.tz_offset,
         },
+    }
+}
+
+fn tree_to_proto(tree: &Tree) -> proto::backend::Tree {
+    let mut proto = proto::backend::Tree::default();
+    for entry in tree.entries() {
+        proto.entries.push(proto::backend::tree::Entry {
+            name: entry.name().as_str().to_owned(),
+            value: Some(tree_value_to_proto(entry.value())),
+        });
+    }
+    proto
+}
+
+fn tree_value_to_proto(value: &TreeValue) -> proto::backend::TreeValue {
+    let mut proto = proto::backend::TreeValue::default();
+    match value {
+        TreeValue::File { id, executable } => {
+            proto.value = Some(proto::backend::tree_value::Value::File(
+                proto::backend::tree_value::File {
+                    id: id.to_bytes(),
+                    executable: *executable,
+                },
+            ));
+        }
+        TreeValue::Symlink(id) => {
+            proto.value = Some(proto::backend::tree_value::Value::SymlinkId(id.to_bytes()));
+        }
+        TreeValue::GitSubmodule(_id) => {
+            panic!("cannot store git submodules");
+        }
+        TreeValue::Tree(id) => {
+            proto.value = Some(proto::backend::tree_value::Value::TreeId(id.to_bytes()));
+        }
+        TreeValue::Conflict(id) => {
+            proto.value = Some(proto::backend::tree_value::Value::ConflictId(id.to_bytes()));
+        }
+    }
+    proto
+}
+
+fn tree_from_proto(proto: proto::backend::Tree) -> Tree {
+    let mut tree = Tree::default();
+    for proto_entry in proto.entries {
+        let value = tree_value_from_proto(proto_entry.value.unwrap());
+        tree.set(RepoPathComponentBuf::from(proto_entry.name), value);
+    }
+    tree
+}
+
+fn tree_value_from_proto(proto: proto::backend::TreeValue) -> TreeValue {
+    match proto.value.unwrap() {
+        proto::backend::tree_value::Value::TreeId(id) => TreeValue::Tree(TreeId::new(id)),
+        proto::backend::tree_value::Value::File(proto::backend::tree_value::File {
+            id,
+            executable,
+            ..
+        }) => TreeValue::File {
+            id: FileId::new(id),
+            executable,
+        },
+        proto::backend::tree_value::Value::SymlinkId(id) => TreeValue::Symlink(SymlinkId::new(id)),
+        proto::backend::tree_value::Value::ConflictId(id) => {
+            TreeValue::Conflict(ConflictId::new(id))
+        }
     }
 }

@@ -1,4 +1,6 @@
-use proto::backend::{backend_client::BackendClient, Commit, CommitId};
+use proto::backend::{
+    backend_client::BackendClient, Commit, CommitId, GetEmptyTreeIdReq, Tree, TreeId,
+};
 use tokio::runtime::{Builder, Runtime};
 
 use std::sync::{Arc, Mutex};
@@ -42,5 +44,27 @@ impl BlockingBackendClient {
     ) -> Result<tonic::Response<Commit>, tonic::Status> {
         let mut client = self.client.lock().unwrap();
         self.rt.block_on(client.read_commit(request))
+    }
+
+    pub fn write_tree(
+        &self,
+        request: impl tonic::IntoRequest<Tree>,
+    ) -> Result<tonic::Response<TreeId>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.write_tree(request))
+    }
+
+    pub fn read_tree(
+        &self,
+        request: impl tonic::IntoRequest<TreeId>,
+    ) -> Result<tonic::Response<Tree>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.read_tree(request))
+    }
+
+    pub fn get_empty_tree_id(&self) -> Result<tonic::Response<TreeId>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt
+            .block_on(client.get_empty_tree_id(GetEmptyTreeIdReq::default()))
     }
 }
