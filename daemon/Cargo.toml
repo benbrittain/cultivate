@@ -17,3 +17,4 @@ anyhow = "1.0.79"
 tempfile = "3.10.0"
 prost.workspace = true
 zstd.workspace = true
+assert_matches = "1.5.0"

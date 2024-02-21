@@ -23,7 +23,7 @@ use jj_lib::settings::UserSettings;
 use crate::blocking_client::BlockingBackendClient;
 
 use prost::Message;
-// No reason, taken from local_backend
+
 const COMMIT_ID_LENGTH: usize = 32;
 const CHANGE_ID_LENGTH: usize = 16;
 
