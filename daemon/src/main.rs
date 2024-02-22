@@ -1,6 +1,9 @@
+use std::path::Path;
+
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 
+mod fs;
 mod service;
 
 #[tokio::main]
@@ -16,6 +19,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let reflection_svc = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
         .build()?;
+
+    fs::mount(
+        Path::new("/tmp/cultivate"),
+        Path::new("/tmp/cultivate_data"),
+    )?;
 
     Server::builder()
         .add_service(reflection_svc)
