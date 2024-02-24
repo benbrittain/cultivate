@@ -13,7 +13,6 @@ prost.workspace = true
 tokio.workspace = true
 tonic.workspace = true
 proto.workspace = true
-common.workspace = true
 async-trait.workspace = true
 zstd.workspace = true
 tracing.workspace = true

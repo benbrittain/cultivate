@@ -69,8 +69,8 @@ impl Backend for BackendService {
     }
 
     async fn write_tree(&self, request: Request<Tree>) -> Result<Response<TreeId>, Status> {
-        let tree = request.into_inner();
-        let tree_id = blake3::hash(&tree.encode_to_vec()).as_bytes().to_vec();
+        let tree: crate::store::Tree = request.into_inner().into();
+        let tree_id = tree.get_hash();
         dbg!(&tree_id);
         let mut trees = self.store.trees.lock().unwrap();
         trees.insert(tree_id.clone(), tree);
@@ -82,7 +82,7 @@ impl Backend for BackendService {
         println!("{:x?}", &tree_id);
         let trees = self.store.trees.lock().unwrap();
         let tree = trees.get(&tree_id.tree_id).unwrap();
-        Ok(Response::new(tree.clone()))
+        Ok(Response::new(tree.as_proto()))
     }
 
     async fn write_commit(&self, request: Request<Commit>) -> Result<Response<CommitId>, Status> {
@@ -116,7 +116,7 @@ mod tests {
 
     #[tokio::test]
     async fn write_commit_parents() {
-        let store = Store::default();
+        let store = Store::new();
         let backend = BackendService::new(store);
         let mut commit = Commit::default();
 

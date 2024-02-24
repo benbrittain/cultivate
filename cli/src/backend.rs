@@ -113,8 +113,9 @@ impl Backend for CultivateBackend {
         todo!("Support symlink")
     }
 
+    #[tracing::instrument]
     async fn read_tree(&self, _path: &RepoPath, id: &TreeId) -> BackendResult<Tree> {
-        dbg!(&id);
+        tracing::error!(id = ?id);
         let proto = self
             .client
             .read_tree(tree_id_to_proto(id))
@@ -123,7 +124,9 @@ impl Backend for CultivateBackend {
         Ok(tree_from_proto(proto))
     }
 
+    #[tracing::instrument]
     fn write_tree(&self, _path: &RepoPath, tree: &Tree) -> BackendResult<TreeId> {
+        tracing::error!(tree = ?tree);
         let proto = tree_to_proto(tree);
         let id = self.client.write_tree(proto).unwrap();
         let id = id.into_inner();

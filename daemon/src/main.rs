@@ -5,6 +5,8 @@ use tonic::transport::Server;
 
 mod fs;
 mod service;
+#[macro_use]
+mod content_hash;
 mod store;
 
 #[tokio::main]
