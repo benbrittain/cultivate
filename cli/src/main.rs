@@ -73,8 +73,8 @@ fn run_cultivate_command(
                 ReadonlyRepo::default_index_store_initializer(),
                 ReadonlyRepo::default_submodule_store_initializer(),
                 &*default_working_copy_factory(),
-                // TODO switch to cultivate working copy
-                //&CultivateWorkingCopyFactory {},
+//                &CultivateWorkingCopyFactory {},
+
                 WorkspaceId::default(),
             )?;
             Ok(())
@@ -88,6 +88,8 @@ fn main() -> std::process::ExitCode {
         CultivateWorkingCopy::name().to_owned(),
         Box::new(CultivateWorkingCopyFactory {}),
     );
+    // NOTE: logging before this point will not work since it is
+    // initialized by CliRunner.
     CliRunner::init()
         .set_store_factories(create_store_factories())
         .set_working_copy_factories(working_copy_factories)

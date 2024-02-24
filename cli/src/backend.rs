@@ -114,6 +114,7 @@ impl Backend for CultivateBackend {
     }
 
     async fn read_tree(&self, _path: &RepoPath, id: &TreeId) -> BackendResult<Tree> {
+        dbg!(&id);
         let proto = self
             .client
             .read_tree(tree_id_to_proto(id))

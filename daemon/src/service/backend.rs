@@ -7,33 +7,16 @@ use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
 
-type Id = Vec<u8>;
+use crate::store::Store;
 
 #[derive(Debug)]
 pub struct BackendService {
-    commits: Arc<Mutex<HashMap<Id, Commit>>>,
-    trees: Arc<Mutex<HashMap<Id, Tree>>>,
-    files: Arc<Mutex<HashMap<Id, File>>>,
-    empty_tree_id: Vec<u8>,
+    store: Store,
 }
 
 impl BackendService {
-    pub fn new() -> Self {
-        let commits = Arc::new(Mutex::new(HashMap::new()));
-        let files = Arc::new(Mutex::new(HashMap::new()));
-        let (empty_tree_id, trees) = {
-            let mut trees = HashMap::new();
-            let tree = Tree::default();
-            let empty_tree_id = blake3::hash(&tree.encode_to_vec()).as_bytes().to_vec();
-            trees.insert(empty_tree_id.clone(), tree);
-            (empty_tree_id, Arc::new(Mutex::new(trees)))
-        };
-        BackendService {
-            empty_tree_id,
-            commits,
-            trees,
-            files,
-        }
+    pub fn new(store: Store) -> Self {
+        BackendService { store }
     }
 }
 
@@ -43,7 +26,7 @@ impl Backend for BackendService {
         &self,
         _request: Request<GetEmptyTreeIdReq>,
     ) -> Result<Response<TreeId>, Status> {
-        let tree_id = self.empty_tree_id.clone();
+        let tree_id = self.store.empty_tree_id.clone();
         Ok(Response::new(TreeId { tree_id }))
     }
 
@@ -58,7 +41,7 @@ impl Backend for BackendService {
         let file = request.into_inner();
         let file_id = blake3::hash(&file.encode_to_vec()).as_bytes().to_vec();
         dbg!(&file_id);
-        let mut files = self.files.lock().unwrap();
+        let mut files = self.store.files.lock().unwrap();
         files.insert(file_id.clone(), file);
         Ok(Response::new(FileId { file_id }))
     }
@@ -66,7 +49,7 @@ impl Backend for BackendService {
     async fn read_file(&self, request: Request<FileId>) -> Result<Response<File>, Status> {
         let file_id = request.into_inner();
         println!("{:x?}", &file_id);
-        let files = self.files.lock().unwrap();
+        let files = self.store.files.lock().unwrap();
         let file = files.get(&file_id.file_id).unwrap();
         Ok(Response::new(file.clone()))
     }
@@ -89,7 +72,7 @@ impl Backend for BackendService {
         let tree = request.into_inner();
         let tree_id = blake3::hash(&tree.encode_to_vec()).as_bytes().to_vec();
         dbg!(&tree_id);
-        let mut trees = self.trees.lock().unwrap();
+        let mut trees = self.store.trees.lock().unwrap();
         trees.insert(tree_id.clone(), tree);
         Ok(Response::new(TreeId { tree_id }))
     }
@@ -97,7 +80,7 @@ impl Backend for BackendService {
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
-        let trees = self.trees.lock().unwrap();
+        let trees = self.store.trees.lock().unwrap();
         let tree = trees.get(&tree_id.tree_id).unwrap();
         Ok(Response::new(tree.clone()))
     }
@@ -109,14 +92,14 @@ impl Backend for BackendService {
             return Err(Status::internal("Cannot write a commit with no parents"));
         }
         let commit_id = blake3::hash(&commit.encode_to_vec()).as_bytes().to_vec();
-        let mut commits = self.commits.lock().unwrap();
+        let mut commits = self.store.commits.lock().unwrap();
         commits.insert(commit_id.clone(), commit);
         Ok(Response::new(CommitId { commit_id }))
     }
 
     async fn read_commit(&self, request: Request<CommitId>) -> Result<Response<Commit>, Status> {
         let commit_id = request.into_inner();
-        let commits = self.commits.lock().unwrap();
+        let commits = self.store.commits.lock().unwrap();
         let commit = commits.get(&commit_id.commit_id).unwrap();
         Ok(Response::new(commit.clone()))
     }
@@ -133,7 +116,8 @@ mod tests {
 
     #[tokio::test]
     async fn write_commit_parents() {
-        let backend = BackendService::new();
+        let store = Store::default();
+        let backend = BackendService::new(store);
         let mut commit = Commit::default();
 
         // No parents

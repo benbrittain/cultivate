@@ -479,6 +479,7 @@ dependencies = [
  "proto",
  "tokio",
  "tonic",
+ "tracing",
  "zstd 0.13.0",
 ]
 
@@ -654,6 +655,9 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tonic-reflection",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
  "zstd 0.13.0",
 ]
 
