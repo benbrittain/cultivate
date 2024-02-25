@@ -13,25 +13,11 @@ use fuser::{
     ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite, Request,
 };
 
+use crate::store::{DirectoryDescriptor, FileKind, Inode, InodeAttributes, Store};
+
 const BLOCK_SIZE: u64 = 512;
 
 use fuser::FUSE_ROOT_ID;
-type Inode = u64;
-
-fn time_now() -> (i64, u32) {
-    time_from_system_time(&SystemTime::now())
-}
-
-fn time_from_system_time(system_time: &SystemTime) -> (i64, u32) {
-    // Convert to signed 64-bit time with epoch at 0
-    match system_time.duration_since(UNIX_EPOCH) {
-        Ok(duration) => (duration.as_secs() as i64, duration.subsec_nanos()),
-        Err(before_epoch_error) => (
-            -(before_epoch_error.duration().as_secs() as i64),
-            before_epoch_error.duration().subsec_nanos(),
-        ),
-    }
-}
 
 fn system_time_from_time(secs: i64, nsecs: u32) -> SystemTime {
     if secs >= 0 {
@@ -41,55 +27,29 @@ fn system_time_from_time(secs: i64, nsecs: u32) -> SystemTime {
     }
 }
 
-//#[derive(Serialize, Deserialize)]
-#[derive(Debug, Clone)]
-struct InodeAttributes {
-    pub inode: Inode,
-    pub open_file_handles: u64, // Ref count of open file handles to this inode
-    pub size: u64,
-    pub last_accessed: (i64, u32),
-    pub last_modified: (i64, u32),
-    pub last_metadata_changed: (i64, u32),
-    pub kind: FileKind,
-    // Permissions and special mode bits
-    pub mode: u16,
-    pub hardlinks: u32,
-    pub uid: u32,
-    pub gid: u32,
-    pub xattrs: BTreeMap<Vec<u8>, Vec<u8>>,
-}
-
 impl From<InodeAttributes> for fuser::FileAttr {
     fn from(attrs: InodeAttributes) -> Self {
         fuser::FileAttr {
-            ino: attrs.inode,
-            size: attrs.size,
-            blocks: (attrs.size + BLOCK_SIZE - 1) / BLOCK_SIZE,
-            atime: system_time_from_time(attrs.last_accessed.0, attrs.last_accessed.1),
-            mtime: system_time_from_time(attrs.last_modified.0, attrs.last_modified.1),
+            ino: attrs.get_inode(),
+            size: attrs.get_size(),
+            blocks: (attrs.get_size() + BLOCK_SIZE - 1) / BLOCK_SIZE,
+            atime: system_time_from_time(attrs.get_last_accessed().0, attrs.get_last_accessed().1),
+            mtime: system_time_from_time(attrs.get_last_modified().0, attrs.get_last_modified().1),
             ctime: system_time_from_time(
-                attrs.last_metadata_changed.0,
-                attrs.last_metadata_changed.1,
+                attrs.get_last_metadata_changed().0,
+                attrs.get_last_metadata_changed().1,
             ),
             crtime: SystemTime::UNIX_EPOCH,
-            kind: attrs.kind.into(),
-            perm: attrs.mode,
-            nlink: attrs.hardlinks,
-            uid: attrs.uid,
-            gid: attrs.gid,
+            kind: attrs.get_kind().into(),
+            perm: attrs.get_mode(),
+            nlink: attrs.get_hardlinks(),
+            uid: attrs.get_uid(),
+            gid: attrs.get_gid(),
             rdev: 0,
             blksize: BLOCK_SIZE as u32,
             flags: 0,
         }
     }
-}
-
-//#[derive(Serialize, Deserialize, Copy, Clone, PartialEq)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-enum FileKind {
-    File,
-    Directory,
-    Symlink,
 }
 
 impl From<FileKind> for fuser::FileType {
@@ -102,49 +62,45 @@ impl From<FileKind> for fuser::FileType {
     }
 }
 
-type DirectoryDescriptor = BTreeMap<Vec<u8>, (Inode, FileKind)>;
-
 struct CultivateFS {
-    data_dir: PathBuf,
-    next_file_handle: AtomicU64,
-    inode_store: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
-    content_store: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
+    store: Store,
+    // inode_store: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
+    // content_store: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
 }
 
 impl CultivateFS {
-    pub fn new(data_dir: PathBuf) -> Self {
+    pub fn new(store: Store) -> Self {
         CultivateFS {
-            data_dir,
-            next_file_handle: AtomicU64::new(1),
-            inode_store: Arc::new(Mutex::new(HashMap::new())),
-            content_store: Arc::new(Mutex::new(HashMap::new())),
+            store,
+            //inode_store: Arc::new(Mutex::new(HashMap::new())),
+            //content_store: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     fn get_inode(&self, inode: Inode) -> Result<InodeAttributes, libc::c_int> {
-        let inode_store = self.inode_store.lock().unwrap();
-        if let Some(attr) = inode_store.get(&inode) {
+        if let Some(attr) = self.store.get_inode(inode) {
             return Ok(attr.clone());
         }
         Err(libc::ENOENT)
     }
 
     fn write_inode(&self, inode: &InodeAttributes) {
-        let mut inode_store = self.inode_store.lock().unwrap();
-        inode_store.insert(inode.inode, inode.clone());
+        self.store.write_inode(inode.clone())
     }
 
     fn write_directory_content(&self, inode: Inode, entries: DirectoryDescriptor) {
-        let mut content_store = self.content_store.lock().unwrap();
-        content_store.insert(inode, entries);
+        todo!();
+        //let mut content_store = self.content_store.lock().unwrap();
+        //content_store.insert(inode, entries);
     }
 
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
-        let content_store = self.content_store.lock().unwrap();
-        if let Some(attr) = content_store.get(&inode) {
-            return Ok(attr.clone());
-        }
-        Err(libc::ENOENT)
+        todo!();
+        //let content_store = self.content_store.lock().unwrap();
+        //if let Some(attr) = content_store.get(&inode) {
+        //    return Ok(attr.clone());
+        //}
+        //Err(libc::ENOENT)
     }
 
     fn lookup_name(&self, parent: u64, name: &OsStr) -> Result<InodeAttributes, c_int> {
@@ -158,14 +114,12 @@ impl CultivateFS {
 }
 
 pub struct MountManager {
-    data_dir: PathBuf,
+    store: Store,
 }
 
 impl MountManager {
-    pub fn new<P: Into<PathBuf>>(data_dir: P) -> Self {
-        MountManager {
-            data_dir: data_dir.into(),
-        }
+    pub fn new(store: Store) -> Self {
+        MountManager { store }
     }
 
     pub fn mount<P: Into<PathBuf> + std::fmt::Debug>(&self, mountpoint: P) -> Result<(), Error> {
@@ -173,11 +127,7 @@ impl MountManager {
 
         let options = vec![MountOption::FSName("cultivate".to_string())];
         if mountpoint.is_dir() {
-            fuser::mount2(
-                CultivateFS::new(self.data_dir.clone()),
-                mountpoint,
-                &options,
-            )?;
+            fuser::mount2(CultivateFS::new(self.store.clone()), mountpoint, &options)?;
         } else {
             return Err(anyhow!("No directory to mount filesystem at exists"));
         }
@@ -216,25 +166,11 @@ impl Filesystem for CultivateFS {
         #[allow(unused_variables)] config: &mut KernelConfig,
     ) -> Result<(), libc::c_int> {
         if self.get_inode(FUSE_ROOT_ID).is_err() {
-            // Initialize with empty filesystem
-            let root = InodeAttributes {
-                inode: FUSE_ROOT_ID,
-                open_file_handles: 0,
-                size: 0,
-                last_accessed: time_now(),
-                last_modified: time_now(),
-                last_metadata_changed: time_now(),
-                kind: FileKind::Directory,
-                mode: 0o777,
-                hardlinks: 2,
-                uid: 0,
-                gid: 0,
-                xattrs: Default::default(),
-            };
+            let root = InodeAttributes::from_tree_id(FUSE_ROOT_ID, self.store.get_root_tree_id());
             self.write_inode(&root);
-            let mut entries = BTreeMap::new();
-            entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
-            self.write_directory_content(FUSE_ROOT_ID, entries);
+            //let mut entries = BTreeMap::new();
+            //entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
+            //self.write_directory_content(FUSE_ROOT_ID, entries);
         }
         Ok(())
     }

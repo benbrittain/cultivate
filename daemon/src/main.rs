@@ -27,8 +27,11 @@ async fn main() -> Result<(), anyhow::Error> {
     // use that subscriber to process traces emitted after this point
     tracing::subscriber::set_global_default(subscriber)?;
 
-    let handler = std::thread::spawn(|| {
-        let mount_manager = fs::MountManager::new("/tmp/cultivate_data");
+    let store = store::Store::new();
+
+    let store2 = store.clone();
+    let handler = std::thread::spawn(move || {
+        let mount_manager = fs::MountManager::new(store2);
         mount_manager.mount("/tmp/cultivate")?;
         Ok::<(), anyhow::Error>(())
     });
@@ -36,7 +39,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    let store = store::Store::new();
     let backend = service::backend::BackendService::new(store);
     let backend_svc = BackendServer::new(backend);
 
