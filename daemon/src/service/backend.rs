@@ -72,10 +72,8 @@ impl Backend for BackendService {
 
     async fn write_tree(&self, request: Request<Tree>) -> Result<Response<TreeId>, Status> {
         let tree: crate::store::Tree = request.into_inner().into();
-        let tree_id = tree.get_hash();
+        let tree_id = self.store.write_tree(tree);
         dbg!(&tree_id);
-        let mut trees = self.store.trees.lock().unwrap();
-        trees.insert(tree_id.clone(), tree);
         Ok(Response::new(TreeId {
             tree_id: tree_id.to_vec(),
         }))
@@ -84,8 +82,7 @@ impl Backend for BackendService {
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
-        let trees = self.store.trees.lock().unwrap();
-        let tree = trees.get(tree_id.tree_id.as_slice()).unwrap();
+        let tree = self.store.get_tree(tree_id.tree_id.try_into().unwrap()).unwrap();
         Ok(Response::new(tree.as_proto()))
     }
 

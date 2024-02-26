@@ -71,7 +71,7 @@ impl From<proto::backend::TreeValue> for TreeEntry {
 content_hash! {
     #[derive(Clone, Debug, Default)]
     pub struct Tree {
-        entries: Vec<(String, TreeEntry)>
+        pub entries: Vec<(String, TreeEntry)>
     }
 }
 
@@ -210,15 +210,21 @@ pub(crate) enum FileKind {
 
 #[derive(Clone, Debug)]
 pub struct Store {
-    // Maybe refactor these out? This is more of a TreeStore
+    // Maybe refactor this out? This is more of a TreeStore
     pub commits: Arc<Mutex<HashMap<Id, Commit>>>,
-    pub files: Arc<Mutex<HashMap<Id, File>>>,
 
+    /// Empty sha identity
+    pub empty_tree_id: Id,
+
+    /// File store
+    pub files: Arc<Mutex<HashMap<Id, File>>>,
+    /// Tree store
     pub trees: Arc<Mutex<HashMap<Id, Tree>>>,
+
     inode_store: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
     content_store: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
-    root_tree: Id,
-    pub empty_tree_id: Id,
+
+    root_tree: Arc<Mutex<Id>>,
 }
 
 impl Store {
@@ -235,7 +241,7 @@ impl Store {
             (empty_tree_id, Arc::new(Mutex::new(trees)))
         };
         // The default tree is the empty tree.
-        let root_tree = empty_tree_id.clone();
+        let root_tree = Arc::new(Mutex::new(empty_tree_id.clone()));
         Store {
             commits,
             inode_store,
@@ -251,8 +257,24 @@ impl Store {
         self.empty_tree_id.clone()
     }
 
+    pub fn set_root_tree(&self, tree: Tree) {
+        let mut root_tree = self.root_tree.lock().unwrap();
+        *root_tree = self.write_tree(tree);
+    }
+
     pub fn get_root_tree_id(&self) -> Id {
-        self.root_tree.clone()
+        let root_tree = self.root_tree.lock().unwrap();
+        root_tree.clone()
+    }
+
+    pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
+        let mut content_store = self.content_store.lock().unwrap();
+        content_store.get(&inode).cloned()
+    }
+
+    pub fn get_inode(&self, inode: Inode) -> Option<InodeAttributes> {
+        let mut inode_store = self.inode_store.lock().unwrap();
+        inode_store.get(&inode).cloned()
     }
 
     pub fn write_directory_content(&self, inode: Inode, content: DirectoryDescriptor) {
@@ -260,19 +282,20 @@ impl Store {
         content_store.insert(inode, content);
     }
 
-    pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
-        let mut content_store = self.content_store.lock().unwrap();
-        dbg!(&content_store);
-        content_store.get(&inode).cloned()
-    }
-
     pub fn write_inode(&self, attrs: InodeAttributes) {
         let mut inode_store = self.inode_store.lock().unwrap();
         inode_store.insert(attrs.inode, attrs);
     }
 
-    pub fn get_inode(&self, inode: Inode) -> Option<InodeAttributes> {
-        let mut inode_store = self.inode_store.lock().unwrap();
-        inode_store.get(&inode).cloned()
+    pub fn get_tree(&self, id: Id) -> Option<Tree> {
+        let mut tree_store = self.trees.lock().unwrap();
+        tree_store.get(&id).cloned()
+    }
+
+    pub fn write_tree(&self, tree: Tree) -> Id {
+        let mut tree_store = self.trees.lock().unwrap();
+        let hash = tree.get_hash();
+        tree_store.insert(hash, tree);
+        hash
     }
 }

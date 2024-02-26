@@ -3,6 +3,7 @@ use std::path::Path;
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 
+mod tree;
 mod fs;
 mod service;
 #[macro_use]

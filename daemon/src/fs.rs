@@ -78,13 +78,13 @@ impl CultivateFS {
         Err(libc::ENOENT)
     }
 
-    fn write_inode(&self, attrs: &InodeAttributes) {
-        self.store.write_inode(attrs.clone())
-    }
+    //fn write_inode(&self, attrs: &InodeAttributes) {
+    //    self.store.write_inode(attrs.clone())
+    //}
 
-    fn write_directory_content(&self, inode: Inode, entries: DirectoryDescriptor) {
-        self.store.write_directory_content(inode.clone(), entries)
-    }
+    //fn write_directory_content(&self, inode: Inode, entries: DirectoryDescriptor) {
+    //    self.store.write_directory_content(inode.clone(), entries)
+    //}
 
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
         if let Some(attr) = self.store.get_directory_content(inode) {
@@ -156,20 +156,20 @@ impl Filesystem for CultivateFS {
         }
     }
 
-    fn init(
-        &mut self,
-        req: &Request,
-        #[allow(unused_variables)] config: &mut KernelConfig,
-    ) -> Result<(), libc::c_int> {
-        if self.get_inode(FUSE_ROOT_ID).is_err() {
-            let root = InodeAttributes::from_tree_id(FUSE_ROOT_ID, self.store.get_root_tree_id());
-            self.write_inode(&root);
-            let mut entries = BTreeMap::new();
-            entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
-            self.store.write_directory_content(FUSE_ROOT_ID, entries);
-        }
-        Ok(())
-    }
+    //fn init(
+    //    &mut self,
+    //    req: &Request,
+    //    #[allow(unused_variables)] config: &mut KernelConfig,
+    //) -> Result<(), libc::c_int> {
+    //    if self.get_inode(FUSE_ROOT_ID).is_err() {
+    //        let root = InodeAttributes::from_tree_id(FUSE_ROOT_ID, self.store.get_root_tree_id());
+    //        self.write_inode(&root);
+    //        let mut entries = BTreeMap::new();
+    //        entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
+    //        self.store.write_directory_content(FUSE_ROOT_ID, entries);
+    //    }
+    //    Ok(())
+    //}
 
     //fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
     //    dbg!("statfs() implementation is a stub");
@@ -275,6 +275,9 @@ impl Filesystem for CultivateFS {
 mod tests {
     use std::{fs, sync::mpsc::channel};
 
+    use crate::store::TreeEntry;
+    use crate::store::Tree;
+
     use super::*;
 
     fn setup_mount(func: fn(PathBuf, Store)) {
@@ -293,7 +296,9 @@ mod tests {
 
             // Let the closure run.
             start_tx.send(()).unwrap();
-            let _: () = end_rx.recv().unwrap();
+            // Don't unwrap, if the thread panics it'll hide
+            // the error we want to see in the backtrace.
+            let _ = end_rx.recv();
 
             // Clean up the mount.
             drop(mount_manager);
@@ -320,6 +325,26 @@ mod tests {
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 0);
+        });
+    }
+
+    #[test]
+    fn read_simple_tree_from_dir() {
+        setup_mount(|mount_path, store| {
+            let child_id = store.write_tree(Tree {
+                entries: vec![],
+            });
+
+            store.set_root_tree(Tree {
+                entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
+            });
+
+            let mut entries = fs::read_dir(mount_path)
+                .unwrap()
+                .map(|res| res.map(|e| e.path()))
+                .collect::<Result<Vec<_>, std::io::Error>>()
+                .unwrap();
+            assert_eq!(entries.len(), 1);
         });
     }
 }
