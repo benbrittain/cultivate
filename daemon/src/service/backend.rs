@@ -26,7 +26,7 @@ impl Backend for BackendService {
         &self,
         _request: Request<GetEmptyTreeIdReq>,
     ) -> Result<Response<TreeId>, Status> {
-        let tree_id = self.store.empty_tree_id.clone();
+        let tree_id = self.store.empty_tree_id.to_vec();
         Ok(Response::new(TreeId { tree_id }))
     }
 
@@ -39,18 +39,20 @@ impl Backend for BackendService {
 
     async fn write_file(&self, request: Request<File>) -> Result<Response<FileId>, Status> {
         let file = request.into_inner();
-        let file_id = blake3::hash(&file.encode_to_vec()).as_bytes().to_vec();
+        let file_id = *blake3::hash(&file.encode_to_vec()).as_bytes();
         dbg!(&file_id);
         let mut files = self.store.files.lock().unwrap();
-        files.insert(file_id.clone(), file);
-        Ok(Response::new(FileId { file_id }))
+        files.insert(file_id, file);
+        Ok(Response::new(FileId {
+            file_id: file_id.to_vec(),
+        }))
     }
 
     async fn read_file(&self, request: Request<FileId>) -> Result<Response<File>, Status> {
         let file_id = request.into_inner();
         println!("{:x?}", &file_id);
         let files = self.store.files.lock().unwrap();
-        let file = files.get(&file_id.file_id).unwrap();
+        let file = files.get(file_id.file_id.as_slice()).unwrap();
         Ok(Response::new(file.clone()))
     }
 
@@ -74,14 +76,16 @@ impl Backend for BackendService {
         dbg!(&tree_id);
         let mut trees = self.store.trees.lock().unwrap();
         trees.insert(tree_id.clone(), tree);
-        Ok(Response::new(TreeId { tree_id }))
+        Ok(Response::new(TreeId {
+            tree_id: tree_id.to_vec(),
+        }))
     }
 
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
         let trees = self.store.trees.lock().unwrap();
-        let tree = trees.get(&tree_id.tree_id).unwrap();
+        let tree = trees.get(tree_id.tree_id.as_slice()).unwrap();
         Ok(Response::new(tree.as_proto()))
     }
 
@@ -91,16 +95,19 @@ impl Backend for BackendService {
         if commit.parents.is_empty() {
             return Err(Status::internal("Cannot write a commit with no parents"));
         }
-        let commit_id = blake3::hash(&commit.encode_to_vec()).as_bytes().to_vec();
+        let bindings = blake3::hash(&commit.encode_to_vec());
+        let commit_id = bindings.as_bytes();
         let mut commits = self.store.commits.lock().unwrap();
         commits.insert(commit_id.clone(), commit);
-        Ok(Response::new(CommitId { commit_id }))
+        Ok(Response::new(CommitId {
+            commit_id: commit_id.to_vec(),
+        }))
     }
 
     async fn read_commit(&self, request: Request<CommitId>) -> Result<Response<Commit>, Status> {
         let commit_id = request.into_inner();
         let commits = self.store.commits.lock().unwrap();
-        let commit = commits.get(&commit_id.commit_id).unwrap();
+        let commit = commits.get(commit_id.commit_id.as_slice()).unwrap();
         Ok(Response::new(commit.clone()))
     }
 }

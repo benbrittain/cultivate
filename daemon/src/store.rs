@@ -9,7 +9,7 @@ use proto::backend::{Commit, File};
 
 use crate::content_hash::{blake3, ContentHash};
 
-pub type Id = Vec<u8>;
+pub type Id = [u8; 32];
 
 #[derive(Clone, Debug)]
 pub enum TreeEntry {
@@ -24,12 +24,12 @@ impl ContentHash for TreeEntry {
         match self {
             TreeEntry::File { id, executable } => {
                 state.update(&[b'0']);
-                ContentHash::update(id, state);
+                ContentHash::update(id.as_slice(), state);
                 ContentHash::update(executable, state);
             }
             TreeEntry::TreeId(tree_id) => {
                 state.update(&[b'1']);
-                ContentHash::update(tree_id, state);
+                ContentHash::update(tree_id.as_slice(), state);
             }
             _ => todo!(),
         }
@@ -42,7 +42,7 @@ impl TreeEntry {
         proto.value = Some(match self {
             TreeEntry::File { id, executable } => {
                 let mut proto_entry = proto::backend::tree_value::File::default();
-                proto_entry.id = id.clone();
+                proto_entry.id = id.to_vec();
                 proto_entry.executable = *executable;
                 proto::backend::tree_value::Value::File(proto_entry)
             }
@@ -57,11 +57,11 @@ impl From<proto::backend::TreeValue> for TreeEntry {
         let value: proto::backend::tree_value::Value = proto.value.unwrap();
         use proto::backend::tree_value::Value::*;
         match value {
-            TreeId(id) => TreeEntry::TreeId(id),
-            SymlinkId(id) => TreeEntry::SymlinkId(id),
-            ConflictId(id) => TreeEntry::ConflictId(id),
+            TreeId(id) => TreeEntry::TreeId(id.try_into().unwrap()),
+            SymlinkId(id) => TreeEntry::SymlinkId(id.try_into().unwrap()),
+            ConflictId(id) => TreeEntry::ConflictId(id.try_into().unwrap()),
             File(file) => TreeEntry::File {
-                id: file.id,
+                id: file.id.try_into().unwrap(),
                 executable: file.executable,
             },
         }
@@ -89,7 +89,7 @@ impl From<proto::backend::Tree> for Tree {
 
 impl Tree {
     pub fn get_hash(&self) -> Id {
-        blake3(self).as_bytes().to_vec()
+        *blake3(self).as_bytes()
     }
 
     pub fn as_proto(&self) -> proto::backend::Tree {
