@@ -64,17 +64,11 @@ impl From<FileKind> for fuser::FileType {
 
 struct CultivateFS {
     store: Store,
-    // inode_store: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
-    // content_store: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
 }
 
 impl CultivateFS {
     pub fn new(store: Store) -> Self {
-        CultivateFS {
-            store,
-            //inode_store: Arc::new(Mutex::new(HashMap::new())),
-            //content_store: Arc::new(Mutex::new(HashMap::new())),
-        }
+        CultivateFS { store }
     }
 
     fn get_inode(&self, inode: Inode) -> Result<InodeAttributes, libc::c_int> {
@@ -84,23 +78,19 @@ impl CultivateFS {
         Err(libc::ENOENT)
     }
 
-    fn write_inode(&self, inode: &InodeAttributes) {
-        self.store.write_inode(inode.clone())
+    fn write_inode(&self, attrs: &InodeAttributes) {
+        self.store.write_inode(attrs.clone())
     }
 
     fn write_directory_content(&self, inode: Inode, entries: DirectoryDescriptor) {
-        todo!();
-        //let mut content_store = self.content_store.lock().unwrap();
-        //content_store.insert(inode, entries);
+        self.store.write_directory_content(inode.clone(), entries)
     }
 
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
-        todo!();
-        //let content_store = self.content_store.lock().unwrap();
-        //if let Some(attr) = content_store.get(&inode) {
-        //    return Ok(attr.clone());
-        //}
-        //Err(libc::ENOENT)
+        if let Some(attr) = self.store.get_directory_content(inode) {
+            return Ok(attr.clone());
+        }
+        Err(libc::ENOENT)
     }
 
     fn lookup_name(&self, parent: u64, name: &OsStr) -> Result<InodeAttributes, c_int> {
@@ -122,16 +112,22 @@ impl MountManager {
         MountManager { store }
     }
 
-    pub fn mount<P: Into<PathBuf> + std::fmt::Debug>(&self, mountpoint: P) -> Result<(), Error> {
+    pub fn mount<P: Into<PathBuf> + std::fmt::Debug>(
+        &self,
+        mountpoint: P,
+    ) -> Result<fuser::BackgroundSession, Error> {
         let mountpoint = mountpoint.into();
 
-        let options = vec![MountOption::FSName("cultivate".to_string())];
+        let mut options = vec![
+            MountOption::FSName("cultivate".to_string()),
+            MountOption::AutoUnmount,
+        ];
         if mountpoint.is_dir() {
-            fuser::mount2(CultivateFS::new(self.store.clone()), mountpoint, &options)?;
+            fuser::spawn_mount2(CultivateFS::new(self.store.clone()), mountpoint, &options)
+                .map_err(Into::into)
         } else {
-            return Err(anyhow!("No directory to mount filesystem at exists"));
+            Err(anyhow!("No directory to mount filesystem at exists"))
         }
-        Ok(())
     }
 }
 
@@ -168,9 +164,9 @@ impl Filesystem for CultivateFS {
         if self.get_inode(FUSE_ROOT_ID).is_err() {
             let root = InodeAttributes::from_tree_id(FUSE_ROOT_ID, self.store.get_root_tree_id());
             self.write_inode(&root);
-            //let mut entries = BTreeMap::new();
-            //entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
-            //self.write_directory_content(FUSE_ROOT_ID, entries);
+            let mut entries = BTreeMap::new();
+            entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
+            self.store.write_directory_content(FUSE_ROOT_ID, entries);
         }
         Ok(())
     }
@@ -272,5 +268,58 @@ impl Filesystem for CultivateFS {
             Ok(attrs) => reply.attr(&Duration::new(0, 0), &attrs.into()),
             Err(error_code) => reply.error(error_code),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, sync::mpsc::channel};
+
+    use super::*;
+
+    fn setup_mount(func: fn(PathBuf, Store)) {
+        let (start_tx, start_rx) = channel();
+        let (end_tx, end_rx) = channel();
+
+        let store = Store::new();
+        let mount_manager = crate::fs::MountManager::new(store.clone());
+
+        let tmp_dir = tempdir::TempDir::new("cultivate-test").unwrap();
+        let tmp_dir_path = tmp_dir.path().to_path_buf();
+        let tmp_dir_path2 = tmp_dir.path().to_path_buf();
+        let handler = std::thread::spawn(move || {
+            // Mount the vfs.
+            mount_manager.mount(tmp_dir_path).unwrap();
+
+            // Let the closure run.
+            start_tx.send(()).unwrap();
+            let _: () = end_rx.recv().unwrap();
+
+            // Clean up the mount.
+            drop(mount_manager);
+            tmp_dir.close().unwrap()
+        });
+
+        // Run the closure after the filesystem is mounted.
+        let _: () = start_rx.recv().unwrap();
+        func(tmp_dir_path2, store);
+
+        // Signal time to cleanup file system.
+        end_tx.send(()).unwrap();
+
+        // Wait for cleanup to finish.
+        handler.join().unwrap();
+    }
+
+    #[test]
+    fn read_empty_dir() {
+        setup_mount(|mount_path, store| {
+            let mut entries = fs::read_dir(mount_path)
+                .unwrap()
+                .map(|res| res.map(|e| e.path()))
+                .collect::<Result<Vec<_>, std::io::Error>>()
+                .unwrap();
+            assert_eq!(entries.len(), 0);
+        });
     }
 }

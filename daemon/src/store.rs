@@ -216,6 +216,7 @@ pub struct Store {
 
     pub trees: Arc<Mutex<HashMap<Id, Tree>>>,
     inode_store: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
+    content_store: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
     root_tree: Id,
     pub empty_tree_id: Id,
 }
@@ -224,6 +225,7 @@ impl Store {
     pub fn new() -> Self {
         let commits = Arc::new(Mutex::new(HashMap::new()));
         let inode_store = Arc::new(Mutex::new(HashMap::new()));
+        let content_store = Arc::new(Mutex::new(HashMap::new()));
         let files = Arc::new(Mutex::new(HashMap::new()));
         let (empty_tree_id, trees) = {
             let mut trees = HashMap::new();
@@ -237,6 +239,7 @@ impl Store {
         Store {
             commits,
             inode_store,
+            content_store,
             trees,
             files,
             empty_tree_id,
@@ -252,9 +255,20 @@ impl Store {
         self.root_tree.clone()
     }
 
-    pub fn write_inode(&self, inode: InodeAttributes) {
+    pub fn write_directory_content(&self, inode: Inode, content: DirectoryDescriptor) {
+        let mut content_store = self.content_store.lock().unwrap();
+        content_store.insert(inode, content);
+    }
+
+    pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
+        let mut content_store = self.content_store.lock().unwrap();
+        dbg!(&content_store);
+        content_store.get(&inode).cloned()
+    }
+
+    pub fn write_inode(&self, attrs: InodeAttributes) {
         let mut inode_store = self.inode_store.lock().unwrap();
-        inode_store.insert(inode.inode, inode);
+        inode_store.insert(attrs.inode, attrs);
     }
 
     pub fn get_inode(&self, inode: Inode) -> Option<InodeAttributes> {
