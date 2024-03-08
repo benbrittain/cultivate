@@ -33,8 +33,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let store2 = store.clone();
     let handler = std::thread::spawn(move || {
         let mount_manager = fs::MountManager::new(store2);
-        mount_manager.mount("/tmp/cultivate")?;
-        Ok::<(), anyhow::Error>(())
+        mount_manager.mount("/tmp/cultivate").unwrap();
     });
 
     let control = service::control::ControlService {};
@@ -54,7 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .serve(addr)
         .await?;
 
-    handler.join().unwrap()?;
+    handler.join().unwrap();
 
     Ok(())
 }

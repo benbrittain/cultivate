@@ -126,6 +126,7 @@ impl MountManager {
             fuser::spawn_mount2(CultivateFS::new(self.store.clone()), mountpoint, &options)
                 .map_err(Into::into)
         } else {
+            dbg!("ntsheu");
             Err(anyhow!("No directory to mount filesystem at exists"))
         }
     }
@@ -199,6 +200,7 @@ impl Filesystem for CultivateFS {
             }
         };
 
+        // Fill the reply buffer as mus as possible based upon the entries
         for (index, entry) in entries.iter().skip(offset as usize).enumerate() {
             let (name, (inode, file_type)) = entry;
 

@@ -20,10 +20,8 @@ pub trait ContentHash {
 /// The 512-bit BLAKE2b content hash
 pub fn blake3(x: &(impl ContentHash + ?Sized + std::fmt::Debug)) -> blake3::Hash {
     let mut hasher = blake3::Hasher::new();
-    dbg!("{:?}", x);
     x.update(&mut hasher);
-    dbg!("hel");
-    dbg!(hasher.finalize())
+    hasher.finalize()
 }
 
 impl ContentHash for () {
@@ -66,7 +64,6 @@ impl<T: ContentHash + std::fmt::Debug> ContentHash for [T] {
 
 impl<T: ContentHash + std::fmt::Debug, V: ContentHash + std::fmt::Debug> ContentHash for (T, V) {
     fn update(&self, state: &mut blake3::Hasher) {
-        dbg!("{:?}", self);
         self.0.update(state);
         self.1.update(state);
     }
@@ -74,14 +71,12 @@ impl<T: ContentHash + std::fmt::Debug, V: ContentHash + std::fmt::Debug> Content
 
 impl<T: ContentHash + std::fmt::Debug> ContentHash for Vec<T> {
     fn update(&self, state: &mut blake3::Hasher) {
-        dbg!("{:?}", self);
         self.as_slice().update(state)
     }
 }
 
 impl ContentHash for String {
     fn update(&self, state: &mut blake3::Hasher) {
-        dbg!(&self);
         self.as_bytes().update(state);
     }
 }
@@ -153,7 +148,6 @@ macro_rules! content_hash {
 
         impl crate::content_hash::ContentHash for $name {
             fn update(&self, state: &mut blake3::Hasher) {
-                dbg!(&self);
                 $(<$ty as crate::content_hash::ContentHash>::update(&self.$field, state);)*
             }
         }
@@ -164,7 +158,6 @@ macro_rules! content_hash {
 
         impl crate::content_hash::ContentHash for $name {
             fn update(&self, state: &mut blake3::Hasher) {
-                dbg!(&self);
                 <$ty as crate::content_hash::ContentHash>::update(&self.0, state);
             }
         }
