@@ -10,61 +10,14 @@ use std::{
 use anyhow::{anyhow, Error};
 use fuser::{
     Filesystem, KernelConfig, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
-    ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite, Request,
+    ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite, Request, FUSE_ROOT_ID,
 };
 use tracing::info;
 
 use crate::{
-    mount_store::{DirectoryDescriptor, FileKind, Inode, InodeAttributes, MountStore},
+    mount_store::{self, DirectoryDescriptor, FileKind, Inode, InodeAttributes, MountStore},
     store::Store,
 };
-
-const BLOCK_SIZE: u64 = 512;
-
-use fuser::FUSE_ROOT_ID;
-
-fn system_time_from_time(secs: i64, nsecs: u32) -> SystemTime {
-    if secs >= 0 {
-        UNIX_EPOCH + Duration::new(secs as u64, nsecs)
-    } else {
-        UNIX_EPOCH - Duration::new((-secs) as u64, nsecs)
-    }
-}
-
-impl From<InodeAttributes> for fuser::FileAttr {
-    fn from(attrs: InodeAttributes) -> Self {
-        fuser::FileAttr {
-            ino: attrs.get_inode(),
-            size: attrs.get_size(),
-            blocks: (attrs.get_size() + BLOCK_SIZE - 1) / BLOCK_SIZE,
-            atime: system_time_from_time(attrs.get_last_accessed().0, attrs.get_last_accessed().1),
-            mtime: system_time_from_time(attrs.get_last_modified().0, attrs.get_last_modified().1),
-            ctime: system_time_from_time(
-                attrs.get_last_metadata_changed().0,
-                attrs.get_last_metadata_changed().1,
-            ),
-            crtime: SystemTime::UNIX_EPOCH,
-            kind: attrs.get_kind().into(),
-            perm: attrs.get_mode(),
-            nlink: attrs.get_hardlinks(),
-            uid: attrs.get_uid(),
-            gid: attrs.get_gid(),
-            rdev: 0,
-            blksize: BLOCK_SIZE as u32,
-            flags: 0,
-        }
-    }
-}
-
-impl From<FileKind> for fuser::FileType {
-    fn from(kind: FileKind) -> Self {
-        match kind {
-            FileKind::File => fuser::FileType::RegularFile,
-            FileKind::Directory => fuser::FileType::Directory,
-            FileKind::Symlink => fuser::FileType::Symlink,
-        }
-    }
-}
 
 struct CultivateFS {
     store: Store,
@@ -72,17 +25,15 @@ struct CultivateFS {
 }
 
 impl CultivateFS {
-    pub fn new(store: Store) -> Self {
-        let mount_store = MountStore::new();
+    pub fn new(store: Store, mount_store: MountStore) -> Self {
         CultivateFS { store, mount_store }
     }
 
     fn get_inode(&self, inode: Inode) -> Result<InodeAttributes, libc::c_int> {
-        todo!()
-        //if let Some(attr) = self.store.get_inode(inode) {
-        //    return Ok(attr.clone());
-        //}
-        //Err(libc::ENOENT)
+        if let Some(attr) = self.mount_store.get_inode(inode) {
+            return Ok(attr.clone());
+        }
+        Err(libc::ENOENT)
     }
 
     //fn write_inode(&self, attrs: &InodeAttributes) {
@@ -94,26 +45,26 @@ impl CultivateFS {
     //}
 
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
-        //if let Some(attr) = self.store.get_directory_content(inode) {
-        //    return Ok(attr.clone());
-        //}
-        todo!();
+        info!("Get directory contents for {inode}");
+        if let Some(attr) = self.mount_store.get_directory_content(inode) {
+            return Ok(attr.clone());
+        }
         Err(libc::ENOENT)
     }
 
-    fn lookup_name(&self, parent: u64, name: &OsStr) -> Result<InodeAttributes, c_int> {
-        todo!();
-        //let entries = self.get_directory_content(parent)?;
-        //if let Some((inode, _)) = entries.get(name.as_bytes()) {
-        //    self.get_inode(*inode)
-        //} else {
-        Err(libc::ENOENT)
-        //}
+    fn lookup_name(&self, parent: Inode, name: &OsStr) -> Result<InodeAttributes, c_int> {
+        let entries = self.get_directory_content(parent)?;
+        if let Some((inode, _)) = entries.get(name.as_bytes()) {
+            self.get_inode(*inode)
+        } else {
+            Err(libc::ENOENT)
+        }
     }
 }
 
 impl Filesystem for CultivateFS {
-    fn lookup(&mut self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(&mut self, req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
+        dbg!(name);
         // TODO define actual length
         if name.len() > 40 as usize {
             reply.error(libc::ENAMETOOLONG);
@@ -239,11 +190,10 @@ impl Filesystem for CultivateFS {
 
     fn getattr(&mut self, _req: &Request, inode: u64, reply: ReplyAttr) {
         info!("Getting attributes for {inode}");
-        todo!();
-        //match self.get_inode(inode) {
-        //    Ok(attrs) => reply.attr(&Duration::new(0, 0), &attrs.into()),
-        //    Err(error_code) => reply.error(error_code),
-        //}
+        match self.get_inode(inode) {
+            Ok(attrs) => reply.attr(&Duration::new(0, 0), &attrs.into()),
+            Err(error_code) => reply.error(error_code),
+        }
     }
 }
 
@@ -263,6 +213,7 @@ impl MountManager {
     pub fn mount<P: Into<PathBuf> + std::fmt::Debug>(
         &mut self,
         mountpoint: P,
+        mount_store: MountStore,
     ) -> Result<fuser::Notifier, Error> {
         let mountpoint = mountpoint.into();
 
@@ -274,8 +225,11 @@ impl MountManager {
             MountOption::NoSuid,
         ];
         if mountpoint.is_dir() {
-            let session =
-                fuser::Session::new(CultivateFS::new(self.store.clone()), &mountpoint, &options)?;
+            let session = fuser::Session::new(
+                CultivateFS::new(self.store.clone(), mount_store),
+                &mountpoint,
+                &options,
+            )?;
             let notifier = session.notifier();
             let bg = session.spawn().unwrap();
             self.mounts.push(bg);
@@ -293,11 +247,13 @@ mod tests {
     use super::*;
     use crate::store::{Tree, TreeEntry};
 
-    fn setup_mount(func: fn(PathBuf, Store)) {
+    fn setup_mount(func: fn(PathBuf, Store, MountStore)) {
         let (start_tx, start_rx) = channel();
         let (end_tx, end_rx) = channel();
 
         let store = Store::new();
+        let mount_store = MountStore::new();
+        let mount_store2 = mount_store.clone();
         let mut mount_manager = crate::fs::MountManager::new(store.clone());
 
         let tmp_dir = tempdir::TempDir::new("cultivate-test").unwrap();
@@ -305,7 +261,7 @@ mod tests {
         let tmp_dir_path2 = tmp_dir.path().to_path_buf();
         let handler = std::thread::spawn(move || {
             // Mount the vfs.
-            mount_manager.mount(tmp_dir_path).unwrap();
+            mount_manager.mount(tmp_dir_path, mount_store2).unwrap();
 
             // Let the closure run.
             start_tx.send(()).unwrap();
@@ -320,7 +276,7 @@ mod tests {
 
         // Run the closure after the filesystem is mounted.
         let _: () = start_rx.recv().unwrap();
-        func(tmp_dir_path2, store);
+        func(tmp_dir_path2, store, mount_store);
 
         // Signal time to cleanup file system.
         end_tx.send(()).unwrap();
@@ -331,7 +287,10 @@ mod tests {
 
     #[test]
     fn read_empty_dir() {
-        setup_mount(|mount_path, store| {
+        setup_mount(|mount_path, store, mount_store| {
+            let tree_id = store.write_tree(Tree { entries: vec![] });
+            mount_store.set_root_tree(&store, tree_id);
+
             let mut entries = fs::read_dir(mount_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
@@ -343,12 +302,12 @@ mod tests {
 
     #[test]
     fn read_simple_tree_from_dir() {
-        setup_mount(|mount_path, store| {
-            //let child_id = store.write_tree(Tree { entries: vec![] });
-
-            //store.set_root_tree(Tree {
-            //    entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
-            //});
+        setup_mount(|mount_path, store, mount_store| {
+            let child_id = store.write_tree(Tree { entries: vec![] });
+            let tree_id = store.write_tree(Tree {
+                entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
+            });
+            mount_store.set_root_tree(&store, tree_id);
 
             let mut entries = fs::read_dir(mount_path)
                 .unwrap()

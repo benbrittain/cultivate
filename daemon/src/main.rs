@@ -12,6 +12,8 @@ mod content_hash;
 mod mount_store;
 mod store;
 
+use crate::mount_store::MountStore;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let addr = "[::1]:10000".parse()?;
@@ -34,7 +36,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Starting mount manager");
     let mut mount_manager = fs::MountManager::new(store.clone());
-    mount_manager.mount("/tmp/cultivate")?;
+    mount_manager.mount("/tmp/cultivate", MountStore::new())?;
 
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
