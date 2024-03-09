@@ -82,7 +82,10 @@ impl Backend for BackendService {
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
-        let tree = self.store.get_tree(tree_id.tree_id.try_into().unwrap()).unwrap();
+        let tree = self
+            .store
+            .get_tree(tree_id.tree_id.try_into().unwrap())
+            .unwrap();
         Ok(Response::new(tree.as_proto()))
     }
 

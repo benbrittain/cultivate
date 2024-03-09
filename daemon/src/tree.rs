@@ -1,11 +1,13 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-#[derive(Debug)]
-pub struct INode(u64);
+pub type INode = u64;
 
 #[derive(Debug)]
 struct Node {
-
+    hash: blake3::Hash,
 }
 
 #[derive(Clone, Debug)]
@@ -16,21 +18,17 @@ struct TreeStore {
 impl TreeStore {
     pub fn new() -> Self {
         TreeStore {
-            nodes: Arc::new(Mutex::new(HashMap::new()))
+            nodes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn create()  {
+    fn create() {
         let ts = TreeStore::new();
-
     }
-
-
 }

@@ -2,12 +2,14 @@ use std::path::Path;
 
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
+use tracing::info;
 
-mod tree;
 mod fs;
 mod service;
+mod tree;
 #[macro_use]
 mod content_hash;
+mod mount_store;
 mod store;
 
 #[tokio::main]
@@ -28,13 +30,11 @@ async fn main() -> Result<(), anyhow::Error> {
     // use that subscriber to process traces emitted after this point
     tracing::subscriber::set_global_default(subscriber)?;
 
-    let store = store::Store::new();
+    let mut store = store::Store::new();
 
-    let store2 = store.clone();
-    let handler = std::thread::spawn(move || {
-        let mount_manager = fs::MountManager::new(store2);
-        mount_manager.mount("/tmp/cultivate").unwrap();
-    });
+    info!("Starting mount manager");
+    let mut mount_manager = fs::MountManager::new(store.clone());
+    mount_manager.mount("/tmp/cultivate")?;
 
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
@@ -46,14 +46,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
         .build()?;
 
+    info!("Serving jj gRPC interface");
     Server::builder()
         .add_service(reflection_svc)
         .add_service(control_svc)
         .add_service(backend_svc)
         .serve(addr)
         .await?;
-
-    handler.join().unwrap();
 
     Ok(())
 }
