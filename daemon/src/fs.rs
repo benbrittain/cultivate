@@ -298,7 +298,7 @@ mod tests {
         let (end_tx, end_rx) = channel();
 
         let store = Store::new();
-        let mount_manager = crate::fs::MountManager::new(store.clone());
+        let mut mount_manager = crate::fs::MountManager::new(store.clone());
 
         let tmp_dir = tempdir::TempDir::new("cultivate-test").unwrap();
         let tmp_dir_path = tmp_dir.path().to_path_buf();
@@ -344,11 +344,11 @@ mod tests {
     #[test]
     fn read_simple_tree_from_dir() {
         setup_mount(|mount_path, store| {
-            let child_id = store.write_tree(Tree { entries: vec![] });
+            //let child_id = store.write_tree(Tree { entries: vec![] });
 
-            store.set_root_tree(Tree {
-                entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
-            });
+            //store.set_root_tree(Tree {
+            //    entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
+            //});
 
             let mut entries = fs::read_dir(mount_path)
                 .unwrap()
