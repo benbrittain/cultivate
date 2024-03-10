@@ -80,20 +80,16 @@ impl Filesystem for CultivateFS {
         }
     }
 
-    //fn init(
-    //    &mut self,
-    //    req: &Request,
-    //    #[allow(unused_variables)] config: &mut KernelConfig,
-    //) -> Result<(), libc::c_int> {
-    //    if self.get_inode(FUSE_ROOT_ID).is_err() {
-    //        let root = InodeAttributes::from_tree_id(FUSE_ROOT_ID, self.store.get_root_tree_id());
-    //        self.write_inode(&root);
-    //        let mut entries = BTreeMap::new();
-    //        entries.insert(b".".to_vec(), (FUSE_ROOT_ID, FileKind::Directory));
-    //        self.store.write_directory_content(FUSE_ROOT_ID, entries);
-    //    }
-    //    Ok(())
-    //}
+    fn init(
+        &mut self,
+        req: &Request,
+        #[allow(unused_variables)] config: &mut KernelConfig,
+    ) -> Result<(), libc::c_int> {
+        if self.get_inode(FUSE_ROOT_ID).is_err() {
+            self.mount_store.set_root_tree(&self.store, self.store.empty_tree_id)
+        }
+        Ok(())
+    }
 
     //fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
     //    dbg!("statfs() implementation is a stub");
