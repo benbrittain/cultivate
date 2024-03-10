@@ -43,6 +43,8 @@ impl MountStore {
     }
 
     pub fn set_root_tree(&self, store: &Store, hash: Id) {
+        // burn an inode
+        let _ = self.allocate_inode();
         self.insert_tree(store, hash, 1)
     }
 
@@ -50,7 +52,7 @@ impl MountStore {
         let file = store
             .get_file(hash)
             .expect("HashId must refer to a known file");
-        let mut attrs = InodeAttributes::new(inode);
+        let mut attrs = InodeAttributes::new(inode, FileKind::File);
 
         self.set_inode(attrs);
     }
@@ -60,24 +62,23 @@ impl MountStore {
             .get_tree(hash)
             .expect("HashId must refer to a known tree");
 
-        let mut attrs = InodeAttributes::new(inode);
+        let mut attrs = InodeAttributes::new(inode, FileKind::Directory);
 
         let mut entries = BTreeMap::new();
         entries.insert(b".".to_vec(), (inode, FileKind::Directory));
 
+        info!("Inserting inode {inode} for {hash:?}");
         for (entry_name, entry) in tree.entries {
-            dbg!(&entry_name);
+            let new_inode = self.allocate_inode();
+            info!("Inserting entry {entry:?} new_inode={new_inode}");
             match entry {
                 TreeEntry::File { id, executable } => {
-                    let new_inode = self.allocate_inode();
                     self.insert_file(store, id, executable, new_inode);
                     entries.insert(entry_name.into_bytes(), (new_inode, FileKind::File));
                 }
                 TreeEntry::TreeId(id) => {
-                    let new_inode = self.allocate_inode();
+                    self.insert_tree(store, id, new_inode);
                     entries.insert(entry_name.into_bytes(), (new_inode, FileKind::Directory));
-                    // TODO make recursive
-                    // self.insert_tree(store, id, inode)
                 }
                 _ => todo!(),
             }
@@ -166,7 +167,7 @@ impl InodeAttributes {
         self.kind
     }
 
-    pub fn new(inode: Inode) -> InodeAttributes {
+    pub fn new(inode: Inode, kind: FileKind) -> InodeAttributes {
         InodeAttributes {
             inode,
             hash: None,
@@ -175,7 +176,7 @@ impl InodeAttributes {
             last_accessed: time_now(),
             last_modified: time_now(),
             last_metadata_changed: time_now(),
-            kind: FileKind::Directory,
+            kind,
             mode: 0o777,
             hardlinks: 2,
             uid: 0,

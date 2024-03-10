@@ -47,6 +47,7 @@ impl CultivateFS {
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
         info!("Get directory contents for {inode}");
         if let Some(attr) = self.mount_store.get_directory_content(inode) {
+            info!("attr: {attr:#?}");
             return Ok(attr.clone());
         }
         Err(libc::ENOENT)
@@ -352,26 +353,45 @@ mod tests {
     #[traced_test]
     fn read_nested_simple_tree() {
         setup_mount(|mount_path, store, mount_store| {
-            let file_id = store.write_file(File { content: vec![] });
+            let file_id = store.write_file(File {
+                content: b"hello\n".to_vec(),
+            });
+            let file_id2 = store.write_file(File {
+                content: b"hello2\n".to_vec(),
+            });
             let child_id = store.write_tree(Tree {
-                entries: vec![(
-                    "test_file".to_string(),
-                    TreeEntry::File {
-                        id: file_id,
-                        executable: false,
-                    },
-                )],
+                entries: vec![
+                    (
+                        "test_file".to_string(),
+                        TreeEntry::File {
+                            id: file_id,
+                            executable: false,
+                        },
+                    ),
+                    (
+                        "test_file2".to_string(),
+                        TreeEntry::File {
+                            id: file_id,
+                            executable: false,
+                        },
+                    ),
+                ],
             });
             let tree_id = store.write_tree(Tree {
                 entries: vec![("test_dir".to_string(), TreeEntry::TreeId(child_id))],
             });
             mount_store.set_root_tree(&store, tree_id);
 
-            for entry in WalkDir::new(mount_path.clone()) {
-                println!("{:?}", entry);
-            }
+            let mut entries = fs::read_dir(mount_path.clone())
+                .unwrap()
+                .map(|res| res.map(|e| e.path()))
+                .collect::<Result<Vec<_>, std::io::Error>>()
+                .unwrap();
+            assert_eq!(entries.len(), 1);
 
-            let mut entries = fs::read_dir(mount_path)
+            let mut nested_path = mount_path.clone();
+            nested_path.push("test_dir");
+            let mut entries = fs::read_dir(nested_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
