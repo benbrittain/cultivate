@@ -53,7 +53,7 @@ impl MountStore {
             .get_file(hash)
             .expect("HashId must refer to a known file");
         let mut attrs = InodeAttributes::new(inode, FileKind::File);
-
+        attrs.hash = Some(hash);
         self.set_inode(attrs);
     }
 
@@ -89,6 +89,7 @@ impl MountStore {
 
     pub fn set_inode(&self, attrs: InodeAttributes) {
         let mut nodes = self.nodes.lock().unwrap();
+        info!("inode: {attrs:?}");
         nodes.insert(attrs.inode, attrs);
     }
 
@@ -112,7 +113,7 @@ impl MountStore {
 pub(crate) struct InodeAttributes {
     inode: Inode,
     hash: Option<Id>,
-    open_file_handles: u64, // Ref count of open file handles to this inode
+    pub open_file_handles: u64, // Ref count of open file handles to this inode
     size: u64,
     last_accessed: (i64, u32),
     last_modified: (i64, u32),
@@ -127,6 +128,10 @@ pub(crate) struct InodeAttributes {
 }
 
 impl InodeAttributes {
+    pub fn get_hash(&self) -> Option<Id> {
+        self.hash
+    }
+
     pub fn get_inode(&self) -> Inode {
         self.inode
     }
