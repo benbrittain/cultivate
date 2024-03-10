@@ -5,7 +5,7 @@ use std::{
 };
 
 use prost::Message;
-use proto::backend::{Commit, File};
+use proto::backend::Commit;
 use tracing::info;
 
 use crate::content_hash::{blake3, ContentHash};
@@ -92,6 +92,33 @@ impl From<proto::backend::TreeValue> for TreeEntry {
     }
 }
 
+content_hash! {
+#[derive(Clone, Debug, Default)]
+pub struct File {
+    pub content: Vec<u8>,
+}
+}
+
+impl File {
+    pub fn get_hash(&self) -> Id {
+        *blake3(self).as_bytes()
+    }
+
+    pub fn as_proto(&self) -> proto::backend::File {
+        let mut proto = proto::backend::File::default();
+        proto.data = self.content.clone();
+        proto
+    }
+}
+
+impl From<proto::backend::File> for File {
+    fn from(proto: proto::backend::File) -> Self {
+        let mut file = File::default();
+        file.content = proto.data;
+        file
+    }
+}
+
 impl From<proto::backend::Tree> for Tree {
     fn from(proto: proto::backend::Tree) -> Self {
         let mut tree = Tree::default();
@@ -152,6 +179,18 @@ impl Store {
         let mut tree_store = self.trees.lock().unwrap();
         let hash = tree.get_hash();
         tree_store.insert(hash, tree);
+        hash
+    }
+
+    pub fn get_file(&self, id: Id) -> Option<File> {
+        let mut file_store = self.files.lock().unwrap();
+        file_store.get(&id).cloned()
+    }
+
+    pub fn write_file(&self, file: File) -> Id {
+        let mut file_store = self.files.lock().unwrap();
+        let hash = file.get_hash();
+        file_store.insert(hash, file);
         hash
     }
 }

@@ -42,7 +42,7 @@ impl Backend for BackendService {
         let file_id = *blake3::hash(&file.encode_to_vec()).as_bytes();
         dbg!(&file_id);
         let mut files = self.store.files.lock().unwrap();
-        files.insert(file_id, file);
+        files.insert(file_id, file.into());
         Ok(Response::new(FileId {
             file_id: file_id.to_vec(),
         }))
@@ -53,7 +53,7 @@ impl Backend for BackendService {
         println!("{:x?}", &file_id);
         let files = self.store.files.lock().unwrap();
         let file = files.get(file_id.file_id.as_slice()).unwrap();
-        Ok(Response::new(file.clone()))
+        Ok(Response::new(file.as_proto()))
     }
 
     async fn write_symlink(

@@ -15,6 +15,7 @@ use crate::{
 };
 
 const BLOCK_SIZE: u64 = 512;
+
 /// Index Node Number
 pub type Inode = u64;
 
@@ -45,6 +46,15 @@ impl MountStore {
         self.insert_tree(store, hash, 1)
     }
 
+    pub fn insert_file(&self, store: &Store, hash: Id, executable: bool, inode: Inode) {
+        let file = store
+            .get_file(hash)
+            .expect("HashId must refer to a known file");
+        let mut attrs = InodeAttributes::new(inode);
+
+        self.set_inode(attrs);
+    }
+
     pub fn insert_tree(&self, store: &Store, hash: Id, inode: Inode) {
         let tree = store
             .get_tree(hash)
@@ -59,12 +69,15 @@ impl MountStore {
             dbg!(&entry_name);
             match entry {
                 TreeEntry::File { id, executable } => {
-                    todo!();
+                    let new_inode = self.allocate_inode();
+                    self.insert_file(store, id, executable, new_inode);
+                    entries.insert(entry_name.into_bytes(), (new_inode, FileKind::File));
                 }
                 TreeEntry::TreeId(id) => {
                     let new_inode = self.allocate_inode();
                     entries.insert(entry_name.into_bytes(), (new_inode, FileKind::Directory));
-                    //self.insert_tree(store, id, inode)
+                    // TODO make recursive
+                    // self.insert_tree(store, id, inode)
                 }
                 _ => todo!(),
             }

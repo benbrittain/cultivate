@@ -245,7 +245,7 @@ mod tests {
     use std::{fs, sync::mpsc::channel};
 
     use super::*;
-    use crate::store::{Tree, TreeEntry};
+    use crate::store::{File, Tree, TreeEntry};
 
     fn setup_mount(func: fn(PathBuf, Store, MountStore)) {
         let (start_tx, start_rx) = channel();
@@ -315,6 +315,34 @@ mod tests {
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 1);
+        });
+    }
+
+    #[test]
+    fn read_simple_tree_from_dir_with_file() {
+        setup_mount(|mount_path, store, mount_store| {
+            let child_id = store.write_tree(Tree { entries: vec![] });
+            let file_id = store.write_file(File { content: vec![] });
+            let tree_id = store.write_tree(Tree {
+                entries: vec![
+                    ("test_dir".to_string(), TreeEntry::TreeId(child_id)),
+                    (
+                        "test_file".to_string(),
+                        TreeEntry::File {
+                            id: file_id,
+                            executable: false,
+                        },
+                    ),
+                ],
+            });
+            mount_store.set_root_tree(&store, tree_id);
+
+            let mut entries = fs::read_dir(mount_path)
+                .unwrap()
+                .map(|res| res.map(|e| e.path()))
+                .collect::<Result<Vec<_>, std::io::Error>>()
+                .unwrap();
+            assert_eq!(entries.len(), 2);
         });
     }
 }
