@@ -12,7 +12,7 @@ use fuser::{
     Filesystem, KernelConfig, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite, Request, FUSE_ROOT_ID,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     mount_store::{self, DirectoryDescriptor, FileKind, Inode, InodeAttributes, MountStore},
@@ -64,7 +64,7 @@ impl CultivateFS {
 
 impl Filesystem for CultivateFS {
     fn lookup(&mut self, req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
-        dbg!(name);
+        info!("Lookup {name:?} parent={parent}");
         // TODO define actual length
         if name.len() > 40 as usize {
             reply.error(libc::ENAMETOOLONG);
@@ -74,7 +74,7 @@ impl Filesystem for CultivateFS {
         match self.lookup_name(parent, name) {
             Ok(attrs) => reply.entry(&Duration::new(0, 0), &attrs.into(), 0),
             Err(error_code) => {
-                dbg!(error_code);
+                warn!("Lookup for {name:?} failed with {error_code}");
                 reply.error(error_code)
             }
         }
@@ -86,7 +86,8 @@ impl Filesystem for CultivateFS {
         #[allow(unused_variables)] config: &mut KernelConfig,
     ) -> Result<(), libc::c_int> {
         if self.get_inode(FUSE_ROOT_ID).is_err() {
-            self.mount_store.set_root_tree(&self.store, self.store.empty_tree_id)
+            self.mount_store
+                .set_root_tree(&self.store, self.store.empty_tree_id)
         }
         Ok(())
     }
@@ -109,7 +110,7 @@ impl Filesystem for CultivateFS {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        dbg!("readdir() called with {:?}", inode);
+        info!("readdir() called with {:?}", inode);
         assert!(offset >= 0);
         let entries = match self.get_directory_content(inode) {
             Ok(entries) => entries,
@@ -240,6 +241,9 @@ impl MountManager {
 mod tests {
     use std::{fs, sync::mpsc::channel};
 
+    use tracing_test::traced_test;
+    use walkdir::WalkDir;
+
     use super::*;
     use crate::store::{File, Tree, TreeEntry};
 
@@ -297,6 +301,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn read_simple_tree_from_dir() {
         setup_mount(|mount_path, store, mount_store| {
             let child_id = store.write_tree(Tree { entries: vec![] });
@@ -315,6 +320,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn read_simple_tree_from_dir_with_file() {
         setup_mount(|mount_path, store, mount_store| {
             let child_id = store.write_tree(Tree { entries: vec![] });
@@ -332,6 +338,38 @@ mod tests {
                 ],
             });
             mount_store.set_root_tree(&store, tree_id);
+
+            let mut entries = fs::read_dir(mount_path)
+                .unwrap()
+                .map(|res| res.map(|e| e.path()))
+                .collect::<Result<Vec<_>, std::io::Error>>()
+                .unwrap();
+            assert_eq!(entries.len(), 2);
+        });
+    }
+
+    #[test]
+    #[traced_test]
+    fn read_nested_simple_tree() {
+        setup_mount(|mount_path, store, mount_store| {
+            let file_id = store.write_file(File { content: vec![] });
+            let child_id = store.write_tree(Tree {
+                entries: vec![(
+                    "test_file".to_string(),
+                    TreeEntry::File {
+                        id: file_id,
+                        executable: false,
+                    },
+                )],
+            });
+            let tree_id = store.write_tree(Tree {
+                entries: vec![("test_dir".to_string(), TreeEntry::TreeId(child_id))],
+            });
+            mount_store.set_root_tree(&store, tree_id);
+
+            for entry in WalkDir::new(mount_path.clone()) {
+                println!("{:?}", entry);
+            }
 
             let mut entries = fs::read_dir(mount_path)
                 .unwrap()
