@@ -71,9 +71,12 @@ impl CultivateFS {
     }
 
     fn lookup_name(&self, parent: Inode, name: &OsStr) -> Result<InodeAttributes, c_int> {
+        info!("Lookup {name:?}, parent={parent}");
         let entries = self.get_directory_content(parent)?;
         if let Some((inode, _)) = entries.get(name.as_bytes()) {
-            self.get_inode(*inode)
+            let inode = self.get_inode(*inode);
+            info!("found: {inode:?}");
+            inode
         } else {
             Err(libc::ENOENT)
         }
@@ -442,6 +445,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn read_empty_dir() {
         setup_mount(|mount_path, store, mount_store| {
             let tree_id = store.write_tree(Tree { entries: vec![] });
@@ -457,6 +461,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn read_single_file() {
         setup_mount(|mount_path, store, mount_store| {
             let file_id = store.write_file(File {

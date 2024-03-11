@@ -52,7 +52,8 @@ impl MountStore {
         let file = store
             .get_file(hash)
             .expect("HashId must refer to a known file");
-        let mut attrs = InodeAttributes::new(inode, FileKind::File);
+        let size = file.content.len();
+        let mut attrs = InodeAttributes::new(inode, FileKind::File, size as u64);
         attrs.hash = Some(hash);
         self.set_inode(attrs);
     }
@@ -62,7 +63,7 @@ impl MountStore {
             .get_tree(hash)
             .expect("HashId must refer to a known tree");
 
-        let mut attrs = InodeAttributes::new(inode, FileKind::Directory);
+        let mut attrs = InodeAttributes::new(inode, FileKind::Directory, 0);
 
         let mut entries = BTreeMap::new();
         entries.insert(b".".to_vec(), (inode, FileKind::Directory));
@@ -100,7 +101,9 @@ impl MountStore {
 
     pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
         let mut directories = self.directories.lock().unwrap();
-        directories.get(&inode).cloned()
+        let dirs = directories.get(&inode).cloned();
+        info!("dirs: {dirs:?}");
+        dirs
     }
 
     pub fn get_inode(&self, inode: Inode) -> Option<InodeAttributes> {
@@ -172,12 +175,13 @@ impl InodeAttributes {
         self.kind
     }
 
-    pub fn new(inode: Inode, kind: FileKind) -> InodeAttributes {
+    pub fn new(inode: Inode, kind: FileKind, size: u64) -> InodeAttributes {
+        assert!((kind == FileKind::Directory) && (size == 0) || kind == FileKind::File);
         InodeAttributes {
             inode,
             hash: None,
             open_file_handles: 0,
-            size: 0,
+            size,
             last_accessed: time_now(),
             last_modified: time_now(),
             last_metadata_changed: time_now(),
