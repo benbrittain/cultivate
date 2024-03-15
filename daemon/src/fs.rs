@@ -1,26 +1,24 @@
 use std::{
     cmp::min,
-    collections::{BTreeMap, HashMap},
     ffi::{c_int, OsStr},
     io::{Cursor, Read},
     os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
+    path::{PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration},
 };
 
 use anyhow::{anyhow, Error};
 use fuser::{
     Filesystem, KernelConfig, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
-    ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite, Request, FUSE_ROOT_ID,
+    ReplyEntry, ReplyOpen, Request, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
 use crate::{
-    mount_store::{self, DirectoryDescriptor, FileKind, Inode, InodeAttributes, MountStore},
+    mount_store::{DirectoryDescriptor, Inode, InodeAttributes, MountStore},
     store::Store,
 };
 
@@ -373,7 +371,7 @@ impl MountManager {
     ) -> Result<fuser::Notifier, Error> {
         let mountpoint = mountpoint.into();
 
-        let mut options = vec![
+        let options = vec![
             MountOption::FSName("cultivate".to_string()),
             MountOption::AutoUnmount,
             MountOption::NoDev,

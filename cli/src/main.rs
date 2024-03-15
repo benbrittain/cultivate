@@ -7,7 +7,7 @@ use jj_lib::{
     repo::{ReadonlyRepo, StoreFactories},
     signing::Signer,
     workspace::{
-        default_working_copy_factories, default_working_copy_factory, Workspace, WorkspaceInitError,
+        default_working_copy_factories, Workspace, WorkspaceInitError,
     },
 };
 

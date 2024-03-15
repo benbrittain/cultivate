@@ -4,14 +4,13 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use prost::Message;
-use proto::backend::{Commit, File};
+
+
 use tracing::info;
-use tracing_log::log::warn;
+
 
 use crate::{
-    content_hash::{blake3, ContentHash},
-    store::{Id, Store, Tree, TreeEntry},
+    store::{Id, Store, TreeEntry},
 };
 
 const BLOCK_SIZE: u64 = 512;
@@ -63,7 +62,7 @@ impl MountStore {
             .get_tree(hash)
             .expect("HashId must refer to a known tree");
 
-        let mut attrs = InodeAttributes::new(inode, FileKind::Directory, 0);
+        let attrs = InodeAttributes::new(inode, FileKind::Directory, 0);
 
         let mut entries = BTreeMap::new();
         entries.insert(b".".to_vec(), (inode, FileKind::Directory));
@@ -100,14 +99,14 @@ impl MountStore {
     }
 
     pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
-        let mut directories = self.directories.lock().unwrap();
+        let directories = self.directories.lock().unwrap();
         let dirs = directories.get(&inode).cloned();
         info!("dirs: {dirs:?}");
         dirs
     }
 
     pub fn get_inode(&self, inode: Inode) -> Option<InodeAttributes> {
-        let mut inode_store = self.nodes.lock().unwrap();
+        let inode_store = self.nodes.lock().unwrap();
         inode_store.get(&inode).cloned()
     }
 }

@@ -1,4 +1,4 @@
-use std::path::Path;
+
 
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
@@ -32,7 +32,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // use that subscriber to process traces emitted after this point
     tracing::subscriber::set_global_default(subscriber)?;
 
-    let mut store = store::Store::new();
+    let store = store::Store::new();
 
     info!("Starting mount manager");
     let mut mount_manager = fs::MountManager::new(store.clone());

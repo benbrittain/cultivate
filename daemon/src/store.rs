@@ -1,12 +1,11 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{HashMap},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use prost::Message;
+
 use proto::backend::Commit;
-use tracing::info;
+
 
 use crate::content_hash::{blake3, ContentHash};
 
@@ -171,7 +170,7 @@ impl Store {
     }
 
     pub fn get_tree(&self, id: Id) -> Option<Tree> {
-        let mut tree_store = self.trees.lock().unwrap();
+        let tree_store = self.trees.lock().unwrap();
         tree_store.get(&id).cloned()
     }
 
@@ -183,7 +182,7 @@ impl Store {
     }
 
     pub fn get_file(&self, id: Id) -> Option<File> {
-        let mut file_store = self.files.lock().unwrap();
+        let file_store = self.files.lock().unwrap();
         file_store.get(&id).cloned()
     }
 

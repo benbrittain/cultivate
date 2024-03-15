@@ -16,7 +16,7 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use tracing::{debug, error};
+use tracing::{error};
 
 pub struct CultivateWorkingCopyFactory {}
 
@@ -155,7 +155,7 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
         self.inner.old_tree_id()
     }
 
-    fn snapshot(&mut self, mut options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
+    fn snapshot(&mut self, options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
         error!("snapshot");
         //options.base_ignores = options.base_ignores.chain("", "/.conflicts".as_bytes());
         let x = self.inner.snapshot(options);
