@@ -4,14 +4,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-
-
 use tracing::info;
 
-
-use crate::{
-    store::{Id, Store, TreeEntry},
-};
+use crate::store::{Id, Store, TreeEntry};
 
 const BLOCK_SIZE: u64 = 512;
 

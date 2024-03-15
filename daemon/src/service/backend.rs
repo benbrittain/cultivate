@@ -1,5 +1,3 @@
-
-
 use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
@@ -69,7 +67,7 @@ impl Backend for BackendService {
 
     async fn write_tree(&self, request: Request<Tree>) -> Result<Response<TreeId>, Status> {
         let tree: crate::store::Tree = request.into_inner().into();
-        let tree_id = self.store.write_tree(tree);
+        let tree_id = self.store.write_tree(tree).await;
         dbg!(&tree_id);
         Ok(Response::new(TreeId {
             tree_id: tree_id.to_vec(),

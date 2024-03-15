@@ -3,11 +3,9 @@ use std::{
     ffi::{c_int, OsStr},
     io::{Cursor, Read},
     os::unix::ffi::OsStrExt,
-    path::{PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-    },
-    time::{Duration},
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use anyhow::{anyhow, Error};
@@ -396,7 +394,7 @@ impl MountManager {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::mpsc::channel};
+    use std::{fs, future::Future, sync::mpsc::channel};
 
     use tracing_test::traced_test;
     use walkdir::WalkDir;
@@ -404,7 +402,9 @@ mod tests {
     use super::*;
     use crate::store::{File, Tree, TreeEntry};
 
-    fn setup_mount(func: fn(PathBuf, Store, MountStore)) {
+    async fn setup_mount<F: Fn(PathBuf, Store, MountStore) -> Fut, Fut: Future<Output = ()>>(
+        func: F,
+    ) {
         let (start_tx, start_rx) = channel();
         let (end_tx, end_rx) = channel();
 
@@ -433,7 +433,7 @@ mod tests {
 
         // Run the closure after the filesystem is mounted.
         let _: () = start_rx.recv().unwrap();
-        func(tmp_dir_path2, store, mount_store);
+        func(tmp_dir_path2, store, mount_store).await;
 
         // Signal time to cleanup file system.
         end_tx.send(()).unwrap();
@@ -442,130 +442,145 @@ mod tests {
         handler.join().unwrap();
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn read_empty_dir() {
-        setup_mount(|mount_path, store, mount_store| {
-            let tree_id = store.write_tree(Tree { entries: vec![] });
+    async fn read_empty_dir() {
+        setup_mount(|mount_path, store, mount_store| async move {
+            let tree_id = store.write_tree(Tree { entries: vec![] }).await;
             mount_store.set_root_tree(&store, tree_id);
 
-            let mut entries = fs::read_dir(mount_path)
+            let entries = fs::read_dir(mount_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 0);
-        });
+        })
+        .await;
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn read_single_file() {
-        setup_mount(|mount_path, store, mount_store| {
-            let file_id = store.write_file(File {
-                content: b"the last yak".to_vec(),
-            });
+    async fn read_single_file() {
+        setup_mount(|mount_path, store, mount_store| async move {
+            let file_id = store
+                .write_file(File {
+                    content: b"the last yak".to_vec(),
+                })
+                .await;
 
-            let tree_id = store.write_tree(Tree {
-                entries: vec![(
-                    "file_to_read".to_string(),
-                    TreeEntry::File {
-                        id: file_id,
-                        executable: false,
-                    },
-                )],
-            });
+            let tree_id = store
+                .write_tree(Tree {
+                    entries: vec![(
+                        "file_to_read".to_string(),
+                        TreeEntry::File {
+                            id: file_id,
+                            executable: false,
+                        },
+                    )],
+                })
+                .await;
             mount_store.set_root_tree(&store, tree_id);
             let mut fin = mount_path.clone();
             fin.push("file_to_read");
 
             let file_content: String = fs::read_to_string(fin).unwrap().parse().unwrap();
             assert_eq!(file_content, "the last yak");
-        });
+        })
+        .await;
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn read_simple_tree_from_dir() {
-        setup_mount(|mount_path, store, mount_store| {
-            let child_id = store.write_tree(Tree { entries: vec![] });
-            let tree_id = store.write_tree(Tree {
-                entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
-            });
+    async fn read_simple_tree_from_dir() {
+        setup_mount(|mount_path, store, mount_store| async move {
+            let child_id = store.write_tree(Tree { entries: vec![] }).await;
+            let tree_id = store
+                .write_tree(Tree {
+                    entries: vec![("test".to_string(), TreeEntry::TreeId(child_id))],
+                })
+                .await;
             mount_store.set_root_tree(&store, tree_id);
 
-            let mut entries = fs::read_dir(mount_path)
+            let entries = fs::read_dir(mount_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 1);
-        });
+        })
+        .await;
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn read_simple_tree_from_dir_with_file() {
-        setup_mount(|mount_path, store, mount_store| {
-            let child_id = store.write_tree(Tree { entries: vec![] });
-            let file_id = store.write_file(File { content: vec![] });
-            let tree_id = store.write_tree(Tree {
-                entries: vec![
-                    ("test_dir".to_string(), TreeEntry::TreeId(child_id)),
-                    (
-                        "test_file".to_string(),
-                        TreeEntry::File {
-                            id: file_id,
-                            executable: false,
-                        },
-                    ),
-                ],
-            });
+    async fn read_simple_tree_from_dir_with_file() {
+        setup_mount(|mount_path, store, mount_store| async move {
+            let child_id = store.write_tree(Tree { entries: vec![] }).await;
+            let file_id = store.write_file(File { content: vec![] }).await;
+            let tree_id = store
+                .write_tree(Tree {
+                    entries: vec![
+                        ("test_dir".to_string(), TreeEntry::TreeId(child_id)),
+                        (
+                            "test_file".to_string(),
+                            TreeEntry::File {
+                                id: file_id,
+                                executable: false,
+                            },
+                        ),
+                    ],
+                })
+                .await;
             mount_store.set_root_tree(&store, tree_id);
 
-            let mut entries = fs::read_dir(mount_path)
+            let entries = fs::read_dir(mount_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 2);
-        });
+        })
+        .await;
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn read_nested_simple_tree() {
-        setup_mount(|mount_path, store, mount_store| {
-            let file_id = store.write_file(File {
-                content: b"hello\n".to_vec(),
-            });
-            let file_id2 = store.write_file(File {
-                content: b"hello2\n".to_vec(),
-            });
-            let child_id = store.write_tree(Tree {
-                entries: vec![
-                    (
-                        "test_file".to_string(),
-                        TreeEntry::File {
-                            id: file_id,
-                            executable: false,
-                        },
-                    ),
-                    (
-                        "test_file2".to_string(),
-                        TreeEntry::File {
-                            id: file_id,
-                            executable: false,
-                        },
-                    ),
-                ],
-            });
-            let tree_id = store.write_tree(Tree {
-                entries: vec![("test_dir".to_string(), TreeEntry::TreeId(child_id))],
-            });
+    async fn read_nested_simple_tree() {
+        setup_mount(|mount_path, store, mount_store| async move {
+            let file_id = store
+                .write_file(File {
+                    content: b"hello\n".to_vec(),
+                })
+                .await;
+            let child_id = store
+                .write_tree(Tree {
+                    entries: vec![
+                        (
+                            "test_file".to_string(),
+                            TreeEntry::File {
+                                id: file_id,
+                                executable: false,
+                            },
+                        ),
+                        (
+                            "test_file2".to_string(),
+                            TreeEntry::File {
+                                id: file_id,
+                                executable: false,
+                            },
+                        ),
+                    ],
+                })
+                .await;
+            let tree_id = store
+                .write_tree(Tree {
+                    entries: vec![("test_dir".to_string(), TreeEntry::TreeId(child_id))],
+                })
+                .await;
             mount_store.set_root_tree(&store, tree_id);
 
-            let mut entries = fs::read_dir(mount_path.clone())
+            let entries = fs::read_dir(mount_path.clone())
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
@@ -574,12 +589,13 @@ mod tests {
 
             let mut nested_path = mount_path.clone();
             nested_path.push("test_dir");
-            let mut entries = fs::read_dir(nested_path)
+            let entries = fs::read_dir(nested_path)
                 .unwrap()
                 .map(|res| res.map(|e| e.path()))
                 .collect::<Result<Vec<_>, std::io::Error>>()
                 .unwrap();
             assert_eq!(entries.len(), 2);
-        });
+        })
+        .await;
     }
 }

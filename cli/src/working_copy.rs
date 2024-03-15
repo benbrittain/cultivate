@@ -16,7 +16,7 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use tracing::{error};
+use tracing::error;
 
 pub struct CultivateWorkingCopyFactory {}
 

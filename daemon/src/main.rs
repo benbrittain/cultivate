@@ -1,5 +1,3 @@
-
-
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 use tracing::info;
@@ -38,18 +36,22 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut mount_manager = fs::MountManager::new(store.clone());
     let ms = MountStore::new();
     mount_manager.mount("/tmp/cultivate", ms.clone())?;
-    let file_id = store.write_file(File {
-        content: b"hello\n".to_vec(),
-    });
-    let tree_id = store.write_tree(Tree {
-        entries: vec![(
-            "test_file".to_string(),
-            TreeEntry::File {
-                id: file_id,
-                executable: false,
-            },
-        )],
-    });
+    let file_id = store
+        .write_file(File {
+            content: b"hello\n".to_vec(),
+        })
+        .await;
+    let tree_id = store
+        .write_tree(Tree {
+            entries: vec![(
+                "test_file".to_string(),
+                TreeEntry::File {
+                    id: file_id,
+                    executable: false,
+                },
+            )],
+        })
+        .await;
     ms.set_root_tree(&store, tree_id);
 
     let control = service::control::ControlService {};

@@ -6,9 +6,7 @@ use jj_lib::{
     op_store::WorkspaceId,
     repo::{ReadonlyRepo, StoreFactories},
     signing::Signer,
-    workspace::{
-        default_working_copy_factories, Workspace, WorkspaceInitError,
-    },
+    workspace::{default_working_copy_factories, Workspace, WorkspaceInitError},
 };
 
 mod backend;
