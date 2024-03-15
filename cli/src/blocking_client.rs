@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use proto::backend::{
-    backend_client::BackendClient, Commit, CommitId, File, FileId, GetEmptyTreeIdReq, Tree, TreeId,
+    backend_client::BackendClient, Commit, CommitId, File, FileId, GetEmptyTreeIdReq,
+    SetActiveSnapshotReply, Tree, TreeId,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -28,6 +29,14 @@ impl BlockingBackendClient {
         let client = Arc::new(Mutex::new(rt.block_on(BackendClient::connect(dst))?));
 
         Ok(Self { client, rt })
+    }
+
+    pub fn set_active_snapshot(
+        &self,
+        request: impl tonic::IntoRequest<TreeId>,
+    ) -> Result<tonic::Response<SetActiveSnapshotReply>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        self.rt.block_on(client.set_active_snapshot(request))
     }
 
     pub fn write_commit(

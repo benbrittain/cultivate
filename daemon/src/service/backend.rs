@@ -2,21 +2,40 @@ use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
 
-use crate::store::Store;
+use crate::{mount_store::MountStore, store::Store};
 
 #[derive(Debug)]
 pub struct BackendService {
     store: Store,
+    // TODO remove this. This is only here for some hacky testing,
+    // there should be no knowledege of individual mounts in here.
+    current_store: MountStore,
 }
 
 impl BackendService {
-    pub fn new(store: Store) -> Self {
-        BackendService { store }
+    pub fn new(store: Store, current_store: MountStore) -> Self {
+        BackendService {
+            store,
+            current_store,
+        }
     }
 }
 
 #[tonic::async_trait]
 impl Backend for BackendService {
+    #[tracing::instrument]
+    async fn set_active_snapshot(
+        &self,
+        request: Request<TreeId>,
+    ) -> Result<Response<SetActiveSnapshotReply>, Status> {
+        let tree_id = request.get_ref();
+        self.current_store
+            .set_root_tree(&self.store, tree_id.tree_id.clone().try_into().unwrap());
+
+        Ok(Response::new(SetActiveSnapshotReply {}))
+    }
+
+    #[tracing::instrument]
     async fn get_empty_tree_id(
         &self,
         _request: Request<GetEmptyTreeIdReq>,
@@ -25,6 +44,7 @@ impl Backend for BackendService {
         Ok(Response::new(TreeId { tree_id }))
     }
 
+    #[tracing::instrument]
     async fn concurrency(
         &self,
         _request: Request<ConcurrencyRequest>,
@@ -32,6 +52,7 @@ impl Backend for BackendService {
         todo!()
     }
 
+    #[tracing::instrument]
     async fn write_file(&self, request: Request<File>) -> Result<Response<FileId>, Status> {
         let file = request.into_inner();
         let file_id = *blake3::hash(&file.encode_to_vec()).as_bytes();
@@ -43,6 +64,7 @@ impl Backend for BackendService {
         }))
     }
 
+    #[tracing::instrument]
     async fn read_file(&self, request: Request<FileId>) -> Result<Response<File>, Status> {
         let file_id = request.into_inner();
         println!("{:x?}", &file_id);
@@ -51,6 +73,7 @@ impl Backend for BackendService {
         Ok(Response::new(file.as_proto()))
     }
 
+    #[tracing::instrument]
     async fn write_symlink(
         &self,
         _request: Request<WriteSymlinkRequest>,
@@ -58,6 +81,7 @@ impl Backend for BackendService {
         todo!()
     }
 
+    #[tracing::instrument]
     async fn read_symlink(
         &self,
         _request: Request<ReadSymlinkRequest>,
@@ -65,6 +89,7 @@ impl Backend for BackendService {
         todo!()
     }
 
+    #[tracing::instrument]
     async fn write_tree(&self, request: Request<Tree>) -> Result<Response<TreeId>, Status> {
         let tree: crate::store::Tree = request.into_inner().into();
         let tree_id = self.store.write_tree(tree).await;
@@ -74,6 +99,7 @@ impl Backend for BackendService {
         }))
     }
 
+    #[tracing::instrument]
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
@@ -84,6 +110,7 @@ impl Backend for BackendService {
         Ok(Response::new(tree.as_proto()))
     }
 
+    #[tracing::instrument]
     async fn write_commit(&self, request: Request<Commit>) -> Result<Response<CommitId>, Status> {
         let commit = request.into_inner();
 
@@ -99,10 +126,13 @@ impl Backend for BackendService {
         }))
     }
 
+    #[tracing::instrument]
     async fn read_commit(&self, request: Request<CommitId>) -> Result<Response<Commit>, Status> {
         let commit_id = request.into_inner();
         let commits = self.store.commits.lock().unwrap();
-        let commit = commits.get(commit_id.commit_id.as_slice()).unwrap();
+        let commit = commits
+            .get(commit_id.commit_id.as_slice())
+            .expect("Store should contain commit");
         Ok(Response::new(commit.clone()))
     }
 }

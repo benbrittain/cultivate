@@ -3,6 +3,9 @@ syntax = "proto3";
 package backend;
 
 service Backend {
+
+  rpc SetActiveSnapshot(TreeId) returns (SetActiveSnapshotReply) {}
+
   rpc Concurrency(ConcurrencyRequest) returns (ConcurrencyReply) {}
   rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
   rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
@@ -17,6 +20,8 @@ service Backend {
   rpc WriteCommit(Commit) returns (CommitId) {}
   rpc ReadCommit(CommitId) returns (Commit) {}
 }
+
+message SetActiveSnapshotReply{}
 
 message GetEmptyTreeIdReq {}
 

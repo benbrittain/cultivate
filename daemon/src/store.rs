@@ -172,6 +172,7 @@ impl Store {
         tree_store.get(&id).cloned()
     }
 
+    #[tracing::instrument]
     pub async fn write_tree(&self, tree: Tree) -> Id {
         let mut tree_store = self.trees.lock().unwrap();
         let hash = tree.get_hash();
@@ -184,6 +185,7 @@ impl Store {
         file_store.get(&id).cloned()
     }
 
+    #[tracing::instrument]
     pub async fn write_file(&self, file: File) -> Id {
         let mut file_store = self.files.lock().unwrap();
         let hash = file.get_hash();

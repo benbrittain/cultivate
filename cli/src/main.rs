@@ -12,6 +12,7 @@ use jj_lib::{
 mod backend;
 mod blocking_client;
 mod working_copy;
+
 use backend::CultivateBackend;
 use working_copy::{CultivateWorkingCopy, CultivateWorkingCopyFactory};
 

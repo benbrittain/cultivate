@@ -57,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    let backend = service::backend::BackendService::new(store);
+    let backend = service::backend::BackendService::new(store, ms);
     let backend_svc = BackendServer::new(backend);
 
     let reflection_svc = tonic_reflection::server::Builder::configure()

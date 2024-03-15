@@ -18,6 +18,8 @@ use jj_lib::{
 };
 use tracing::error;
 
+use crate::blocking_client::BlockingBackendClient;
+
 pub struct CultivateWorkingCopyFactory {}
 
 impl WorkingCopyFactory for CultivateWorkingCopyFactory {
@@ -124,8 +126,10 @@ impl WorkingCopy for CultivateWorkingCopy {
 
     fn start_mutation(&self) -> Result<Box<dyn LockedWorkingCopy>, WorkingCopyStateError> {
         let inner = self.inner.start_mutation()?;
+        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
         Ok(Box::new(LockedCultivateWorkingCopy {
             wc_path: self.inner.path().to_owned(),
+            client,
             inner,
         }))
     }
@@ -133,6 +137,7 @@ impl WorkingCopy for CultivateWorkingCopy {
 
 struct LockedCultivateWorkingCopy {
     wc_path: PathBuf,
+    client: BlockingBackendClient,
     inner: Box<dyn LockedWorkingCopy>,
 }
 
@@ -158,9 +163,16 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
     fn snapshot(&mut self, options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
         error!("snapshot");
         //options.base_ignores = options.base_ignores.chain("", "/.conflicts".as_bytes());
-        let x = self.inner.snapshot(options);
-        error!("snapshot: {:?}", x);
-        x
+        let tree_id = self.inner.snapshot(options);
+        if let Ok(MergedTreeId::Merge(ref merge)) = tree_id {
+            let tree_id = merge.as_resolved();
+            error!("snapshot: {:?}", &tree_id);
+            let proto_tree_id = tree_id.unwrap();
+            self.client
+                .set_active_snapshot(crate::backend::tree_id_to_proto(proto_tree_id))
+                .unwrap();
+        }
+        tree_id
     }
 
     fn check_out(&mut self, commit: &Commit) -> Result<CheckoutStats, CheckoutError> {

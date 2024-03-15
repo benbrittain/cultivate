@@ -66,7 +66,7 @@ impl CultivateFS {
         Err(libc::ENOENT)
     }
 
-    fn lookup_name(&self, parent: Inode, name: &OsStr) -> Result<InodeAttributes, c_int> {
+    fn lookup_name(&self, parent: Inode, name: &OsStr) -> Result<InodeAttributes, libc::c_int> {
         info!("Lookup {name:?}, parent={parent}");
         let entries = self.get_directory_content(parent)?;
         if let Some((inode, _)) = entries.get(name.as_bytes()) {
@@ -277,7 +277,7 @@ impl Filesystem for CultivateFS {
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
-        error!(
+        info!(
             "read() called on {:?} offset={:?} size={:?}",
             inode, offset, size
         );
