@@ -1,5 +1,6 @@
 use jj_cli::{
-    cli_util::{CliRunner, CommandError, CommandHelper},
+    cli_util::{CliRunner, CommandHelper},
+    command_error::CommandError,
     ui::Ui,
 };
 use jj_lib::{
