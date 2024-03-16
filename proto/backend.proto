@@ -4,8 +4,15 @@ package backend;
 
 service Backend {
 
-  rpc SetActiveSnapshot(TreeId) returns (SetActiveSnapshotReply) {}
+  // Working copy related calls
+  rpc SetCheckoutState(SetCheckoutStateReq) returns (SetCheckoutStateReply) {}
+  rpc GetCheckoutState(GetCheckoutStateReq) returns (CheckoutState) {}
 
+  rpc GetTreeState(GetTreeStateReq) returns (GetTreeStateReply) {}
+
+  rpc Snapshot(SnapshotReq) returns (SnapshotReply) {}
+
+  // Store related calls
   rpc Concurrency(ConcurrencyRequest) returns (ConcurrencyReply) {}
   rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
   rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
@@ -21,7 +28,21 @@ service Backend {
   rpc ReadCommit(CommitId) returns (Commit) {}
 }
 
-message SetActiveSnapshotReply{}
+
+message SnapshotReq {
+  string working_copy_path = 1;
+}
+
+message SnapshotReply {
+  bytes tree_id = 1;
+}
+
+message GetTreeStateReq {
+  string working_copy_path = 1;
+}
+message GetTreeStateReply {
+  bytes tree_id = 1;
+}
 
 message GetEmptyTreeIdReq {}
 
@@ -31,6 +52,22 @@ message ConcurrencyReply {
 }
 
 // File
+
+message CheckoutState {
+  bytes op_id = 1;
+  bytes workspace_id = 2;
+}
+
+message SetCheckoutStateReply{}
+
+message SetCheckoutStateReq {
+  string working_copy_path = 1;
+  CheckoutState checkout_state = 2;
+}
+
+message GetCheckoutStateReq {
+  string working_copy_path = 1;
+}
 
 message FileId {
   bytes file_id = 1;

@@ -10,6 +10,9 @@ use crate::store::{Id, Store, TreeEntry};
 
 const BLOCK_SIZE: u64 = 512;
 
+pub type OperationId = [u8; 64];
+pub type WorkspaceId = String;
+
 /// Index Node Number
 pub type Inode = u64;
 
@@ -17,23 +20,58 @@ pub type DirectoryDescriptor = BTreeMap<Vec<u8>, (Inode, FileKind)>;
 
 #[derive(Clone, Debug)]
 pub struct MountStore {
+    store: Store,
     nodes: Arc<Mutex<HashMap<Inode, InodeAttributes>>>,
     directories: Arc<Mutex<HashMap<Inode, DirectoryDescriptor>>>,
     next_inode: Arc<AtomicU64>,
+
+    op_id: Arc<Mutex<Option<OperationId>>>,
+    workspace_id: Arc<Mutex<Option<WorkspaceId>>>,
+    tree_id: Arc<Mutex<Id>>,
 }
 
 impl MountStore {
-    pub fn new() -> Self {
+    pub fn new(store: Store) -> Self {
+        let tree_id = store.get_empty_tree_id();
         MountStore {
+            store,
             nodes: Arc::new(Mutex::new(HashMap::new())),
             directories: Arc::new(Mutex::new(HashMap::new())),
             next_inode: Arc::new(AtomicU64::new(1)),
+            op_id: Arc::new(Mutex::new(None)),
+            workspace_id: Arc::new(Mutex::new(None)),
+            tree_id: Arc::new(Mutex::new(tree_id)),
         }
     }
 
     pub fn allocate_inode(&self) -> Inode {
         self.next_inode
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn get_tree_id(&self) -> Id {
+        let tree_id = self.tree_id.lock().unwrap();
+        *tree_id
+    }
+
+    pub fn get_op_id(&self) -> OperationId {
+        let op_id = self.op_id.lock().unwrap();
+        op_id.unwrap()
+    }
+
+    pub fn set_op_id(&self, op: OperationId) {
+        let mut op_id = self.op_id.lock().unwrap();
+        *op_id = Some(op);
+    }
+
+    pub fn get_workspace_id(&self) -> WorkspaceId {
+        let workspace_id = self.workspace_id.lock().unwrap();
+        workspace_id.clone().unwrap()
+    }
+
+    pub fn set_workspace_id(&self, op: WorkspaceId) {
+        let mut workspace_id = self.workspace_id.lock().unwrap();
+        *workspace_id = Some(op);
     }
 
     pub fn set_root_tree(&self, store: &Store, hash: Id) {

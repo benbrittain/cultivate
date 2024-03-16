@@ -1,6 +1,6 @@
 use std::{
     cmp::min,
-    ffi::{c_int, OsStr},
+    ffi::OsStr,
     io::{Cursor, Read},
     os::unix::ffi::OsStrExt,
     path::PathBuf,

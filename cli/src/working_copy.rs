@@ -1,13 +1,15 @@
 use std::{
     any::Any,
+    cell::OnceCell,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use jj_lib::{
-    backend::MergedTreeId,
+    backend::{MergedTreeId, TreeId},
     commit::Commit,
-    local_working_copy::LocalWorkingCopy,
+    merge::MergeBuilder,
+    object_id::ObjectId,
     op_store::{OperationId, WorkspaceId},
     repo_path::RepoPathBuf,
     store::Store,
@@ -16,7 +18,8 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use tracing::error;
+use proto::backend::{GetCheckoutStateReq, GetTreeStateReq};
+use tracing::{error, info, warn};
 
 use crate::blocking_client::BlockingBackendClient;
 
@@ -27,14 +30,14 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
         &self,
         store: Arc<Store>,
         working_copy_path: PathBuf,
-        state_path: PathBuf,
+        _state_path: PathBuf,
         operation_id: OperationId,
         workspace_id: WorkspaceId,
     ) -> Result<Box<dyn WorkingCopy>, WorkingCopyStateError> {
         Ok(Box::new(CultivateWorkingCopy::init(
             store,
             working_copy_path,
-            state_path,
+            //state_path,
             operation_id,
             workspace_id,
         )?))
@@ -44,18 +47,23 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
         &self,
         store: Arc<Store>,
         working_copy_path: PathBuf,
-        state_path: PathBuf,
+        _state_path: PathBuf,
     ) -> Box<dyn WorkingCopy> {
         Box::new(CultivateWorkingCopy::load(
             store,
             working_copy_path,
-            state_path,
+            //state_path,
         ))
     }
 }
 
 pub struct CultivateWorkingCopy {
-    inner: Box<dyn WorkingCopy>,
+    store: Arc<Store>,
+    working_copy_path: PathBuf,
+    client: BlockingBackendClient,
+    /// Only access through get_checkout_state
+    checkout_state: OnceCell<CheckoutState>,
+    tree_state: OnceCell<TreeState>,
 }
 
 impl CultivateWorkingCopy {
@@ -66,27 +74,116 @@ impl CultivateWorkingCopy {
     fn init(
         store: Arc<Store>,
         working_copy_path: PathBuf,
-        state_path: PathBuf,
         operation_id: OperationId,
         workspace_id: WorkspaceId,
     ) -> Result<Self, WorkingCopyStateError> {
-        let inner = LocalWorkingCopy::init(
+        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+        client
+            .set_checkout_state(proto::backend::SetCheckoutStateReq {
+                working_copy_path: working_copy_path.to_str().unwrap().to_string(),
+                checkout_state: Some(proto::backend::CheckoutState {
+                    op_id: operation_id.as_bytes().into(),
+                    workspace_id: workspace_id.as_str().into(),
+                }),
+            })
+            .unwrap();
+        Ok(CultivateWorkingCopy {
             store,
             working_copy_path,
-            state_path,
-            operation_id,
-            workspace_id,
-        )?;
-        Ok(CultivateWorkingCopy {
-            inner: Box::new(inner),
+            client,
+            checkout_state: OnceCell::new(),
+            tree_state: OnceCell::new(),
         })
     }
 
-    fn load(store: Arc<Store>, working_copy_path: PathBuf, state_path: PathBuf) -> Self {
-        let inner = LocalWorkingCopy::load(store, working_copy_path, state_path);
+    fn load(store: Arc<Store>, working_copy_path: PathBuf) -> Self {
+        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
         CultivateWorkingCopy {
-            inner: Box::new(inner),
+            store,
+            working_copy_path,
+            client,
+            checkout_state: OnceCell::new(),
+            tree_state: OnceCell::new(),
         }
+    }
+}
+
+/// Working copy state stored in "checkout" file.
+#[derive(Clone, Debug)]
+struct CheckoutState {
+    operation_id: OperationId,
+    workspace_id: WorkspaceId,
+}
+
+#[derive(Clone, Debug)]
+struct TreeState {
+    tree_id: MergedTreeId,
+}
+impl TreeState {
+    pub fn current_tree_id(&self) -> &MergedTreeId {
+        &self.tree_id
+    }
+}
+
+impl CultivateWorkingCopy {
+    fn get_tree_state<'a>(&'a self) -> &'a TreeState {
+        self.tree_state.get_or_init(|| {
+            let tree_state = self
+                .client
+                .get_tree_state(GetTreeStateReq {
+                    working_copy_path: self.working_copy_path.to_str().unwrap().to_string(),
+                })
+                .unwrap()
+                .into_inner();
+            let tree_ids_builder: MergeBuilder<TreeId> =
+                MergeBuilder::from_iter([TreeId::new(tree_state.tree_id)]);
+            TreeState {
+                tree_id: MergedTreeId::Merge(tree_ids_builder.build()),
+            }
+        })
+    }
+
+    fn get_checkout_state<'a>(&'a self) -> &'a CheckoutState {
+        self.checkout_state.get_or_init(|| {
+            let checkout_state = self
+                .client
+                .get_checkout_state(GetCheckoutStateReq {
+                    working_copy_path: self.working_copy_path.to_str().unwrap().to_string(),
+                })
+                .unwrap()
+                .into_inner();
+            CheckoutState {
+                operation_id: OperationId::new(checkout_state.op_id),
+                workspace_id: WorkspaceId::new(
+                    std::str::from_utf8(&checkout_state.workspace_id)
+                        .unwrap()
+                        .to_string(),
+                ),
+            }
+        })
+    }
+
+    fn get_working_copy_lock(&self) -> DaemonLock {
+        DaemonLock::new()
+    }
+
+    fn snapshot(&mut self, options: SnapshotOptions) -> TreeState {
+        let mut tree_state = self
+            .tree_state
+            .get()
+            .expect("Treestate should have been initalized");
+        error!("snapshot not implemented");
+        tree_state.clone()
+    }
+}
+
+/// Distributed lock. The daemon hold the lock since all work
+/// is done in it.
+struct DaemonLock {}
+impl DaemonLock {
+    pub fn new() -> Self {
+        warn!("DaemonLock is unimplemented. No locking currently done.");
+        DaemonLock {}
     }
 }
 
@@ -96,49 +193,56 @@ impl WorkingCopy for CultivateWorkingCopy {
     }
 
     fn name(&self) -> &str {
-        error!("name");
         Self::name()
     }
 
     fn path(&self) -> &Path {
-        error!("path");
-        self.inner.path()
+        &self.working_copy_path
     }
 
     fn workspace_id(&self) -> &WorkspaceId {
-        error!("{:?}", self.inner.workspace_id());
-        self.inner.workspace_id()
+        &self.get_checkout_state().workspace_id
     }
 
     fn operation_id(&self) -> &OperationId {
-        error!("{:?}", self.inner.operation_id());
-        self.inner.operation_id()
+        &self.get_checkout_state().operation_id
     }
 
     fn tree_id(&self) -> Result<&MergedTreeId, WorkingCopyStateError> {
-        error!("tree_id");
-        self.inner.tree_id()
+        Ok(self.get_tree_state().current_tree_id())
     }
 
     fn sparse_patterns(&self) -> Result<&[RepoPathBuf], WorkingCopyStateError> {
-        self.inner.sparse_patterns()
+        todo!()
     }
 
     fn start_mutation(&self) -> Result<Box<dyn LockedWorkingCopy>, WorkingCopyStateError> {
-        let inner = self.inner.start_mutation()?;
-        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+        info!("Starting mutation");
+        let lock = self.get_working_copy_lock();
+        let wc = CultivateWorkingCopy {
+            client: self.client.clone(),
+            store: self.store.clone(),
+            working_copy_path: self.working_copy_path.clone(),
+            checkout_state: OnceCell::new(),
+            tree_state: OnceCell::new(),
+        };
+        let old_operation_id = wc.operation_id().clone();
+        let old_tree_id = wc.tree_id()?.clone();
         Ok(Box::new(LockedCultivateWorkingCopy {
-            wc_path: self.inner.path().to_owned(),
-            client,
-            inner,
+            wc,
+            lock,
+            old_operation_id,
+            old_tree_id,
         }))
     }
 }
 
 struct LockedCultivateWorkingCopy {
-    wc_path: PathBuf,
-    client: BlockingBackendClient,
-    inner: Box<dyn LockedWorkingCopy>,
+    wc: CultivateWorkingCopy,
+    #[allow(dead_code)]
+    lock: DaemonLock,
+    old_operation_id: OperationId,
+    old_tree_id: MergedTreeId,
 }
 
 impl LockedWorkingCopy for LockedCultivateWorkingCopy {
@@ -151,67 +255,47 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
     }
 
     fn old_operation_id(&self) -> &OperationId {
-        error!("old op id");
-        self.inner.old_operation_id()
+        &self.old_operation_id
     }
 
     fn old_tree_id(&self) -> &MergedTreeId {
-        error!("old tree id");
-        self.inner.old_tree_id()
+        &self.old_tree_id
     }
 
     fn snapshot(&mut self, options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
-        error!("snapshot");
-        //options.base_ignores = options.base_ignores.chain("", "/.conflicts".as_bytes());
-        let tree_id = self.inner.snapshot(options);
-        if let Ok(MergedTreeId::Merge(ref merge)) = tree_id {
-            let tree_id = merge.as_resolved();
-            error!("snapshot: {:?}", &tree_id);
-            let proto_tree_id = tree_id.unwrap();
-            self.client
-                .set_active_snapshot(crate::backend::tree_id_to_proto(proto_tree_id))
-                .unwrap();
-        }
-        tree_id
+        let tree_state = self.wc.snapshot(options);
+        Ok(tree_state.tree_id)
     }
 
     fn check_out(&mut self, commit: &Commit) -> Result<CheckoutStats, CheckoutError> {
-        error!("checkout {:?}", commit);
-        //let conflicts = commit
-        //    .tree()?
-        //    .conflicts()
-        //    .map(|(path, _value)| format!("{}\n", path.as_internal_file_string()))
-        //    .join("");
-        //std::fs::write(self.wc_path.join(".conflicts"), conflicts).unwrap();
-        self.inner.check_out(commit)
+        let new_tree = commit.tree()?;
+        todo!()
     }
 
     fn reset(&mut self, commit: &Commit) -> Result<(), ResetError> {
-        error!("reset {:?}", commit);
-        self.inner.reset(commit)
+        todo!()
     }
 
     fn reset_to_empty(&mut self) -> Result<(), ResetError> {
-        error!("reset empty");
-        self.inner.reset_to_empty()
+        todo!()
     }
 
     fn sparse_patterns(&self) -> Result<&[RepoPathBuf], WorkingCopyStateError> {
-        self.inner.sparse_patterns()
+        todo!()
     }
 
     fn set_sparse_patterns(
         &mut self,
-        new_sparse_patterns: Vec<RepoPathBuf>,
+        _new_sparse_patterns: Vec<RepoPathBuf>,
     ) -> Result<CheckoutStats, CheckoutError> {
-        self.inner.set_sparse_patterns(new_sparse_patterns)
+        todo!()
     }
 
     fn finish(
         self: Box<Self>,
         operation_id: OperationId,
     ) -> Result<Box<dyn WorkingCopy>, WorkingCopyStateError> {
-        let inner = self.inner.finish(operation_id)?;
-        Ok(Box::new(CultivateWorkingCopy { inner }))
+        info!("Finished: {operation_id:?}");
+        Ok(Box::new(self.wc))
     }
 }

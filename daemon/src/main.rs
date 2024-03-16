@@ -1,16 +1,17 @@
+use std::collections::HashMap;
+
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 use tracing::info;
 
 mod fs;
 mod service;
-mod tree;
 #[macro_use]
 mod content_hash;
 mod mount_store;
 mod store;
 
-use crate::{mount_store::MountStore, store::*};
+use crate::mount_store::MountStore;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -34,30 +35,32 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Starting mount manager");
     let mut mount_manager = fs::MountManager::new(store.clone());
-    let ms = MountStore::new();
+    let ms = MountStore::new(store.clone());
     mount_manager.mount("/tmp/cultivate", ms.clone())?;
-    let file_id = store
-        .write_file(File {
-            content: b"hello\n".to_vec(),
-        })
-        .await;
-    let tree_id = store
-        .write_tree(Tree {
-            entries: vec![(
-                "test_file".to_string(),
-                TreeEntry::File {
-                    id: file_id,
-                    executable: false,
-                },
-            )],
-        })
-        .await;
-    ms.set_root_tree(&store, tree_id);
+    //let file_id = store
+    //    .write_file(File {
+    //        content: b"hello\n".to_vec(),
+    //    })
+    //    .await;
+    //let tree_id = store
+    //    .write_tree(Tree {
+    //        entries: vec![(
+    //            "test_file".to_string(),
+    //            TreeEntry::File {
+    //                id: file_id,
+    //                executable: false,
+    //            },
+    //        )],
+    //    })
+    //    .await;
+    //ms.set_root_tree(&store, tree_id);
 
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    let backend = service::backend::BackendService::new(store, ms);
+    let mut mounts = HashMap::new();
+    mounts.insert("/home/ben/workspace/jj-test".to_string(), ms.clone());
+    let backend = service::backend::BackendService::new(store, mounts);
     let backend_svc = BackendServer::new(backend);
 
     let reflection_svc = tonic_reflection::server::Builder::configure()

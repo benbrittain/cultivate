@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
+use tracing::info;
 
 use crate::{mount_store::MountStore, store::Store};
 
@@ -9,30 +12,79 @@ pub struct BackendService {
     store: Store,
     // TODO remove this. This is only here for some hacky testing,
     // there should be no knowledege of individual mounts in here.
-    current_store: MountStore,
+    mounts: HashMap<String, MountStore>,
 }
 
 impl BackendService {
-    pub fn new(store: Store, current_store: MountStore) -> Self {
-        BackendService {
-            store,
-            current_store,
-        }
+    pub fn new(store: Store, mounts: HashMap<String, MountStore>) -> Self {
+        BackendService { store, mounts }
     }
 }
 
 #[tonic::async_trait]
 impl Backend for BackendService {
     #[tracing::instrument]
-    async fn set_active_snapshot(
+    async fn get_tree_state(
         &self,
-        request: Request<TreeId>,
-    ) -> Result<Response<SetActiveSnapshotReply>, Status> {
-        let tree_id = request.get_ref();
-        self.current_store
-            .set_root_tree(&self.store, tree_id.tree_id.clone().try_into().unwrap());
+        request: Request<GetTreeStateReq>,
+    ) -> Result<Response<GetTreeStateReply>, Status> {
+        info!("Getting tree state");
+        let req = request.into_inner();
+        let mount = self
+            .mounts
+            .get(&req.working_copy_path)
+            .expect("Mount at working copy.");
+        Ok(Response::new(GetTreeStateReply {
+            tree_id: mount.get_tree_id().to_vec(),
+        }))
+    }
 
-        Ok(Response::new(SetActiveSnapshotReply {}))
+    #[tracing::instrument]
+    async fn get_checkout_state(
+        &self,
+        request: Request<GetCheckoutStateReq>,
+    ) -> Result<Response<CheckoutState>, Status> {
+        info!("Getting checkout state");
+        let req = request.into_inner();
+        let mount = self
+            .mounts
+            .get(&req.working_copy_path)
+            .expect("Mount at working copy.");
+        Ok(Response::new(CheckoutState {
+            op_id: mount.get_op_id().to_vec(),
+            workspace_id: mount.get_workspace_id().into(),
+        }))
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn set_checkout_state(
+        &self,
+        request: Request<SetCheckoutStateReq>,
+    ) -> Result<Response<SetCheckoutStateReply>, Status> {
+        let req = request.into_inner();
+        let mount = self
+            .mounts
+            .get(&req.working_copy_path)
+            .expect("Mount at working copy.");
+        let cs = req.checkout_state.unwrap();
+        let op_id = cs.op_id.try_into().unwrap();
+        let workspace_id = std::str::from_utf8(&cs.workspace_id).unwrap().to_string();
+        mount.set_op_id(op_id);
+        mount.set_workspace_id(workspace_id);
+        Ok(Response::new(SetCheckoutStateReply {}))
+    }
+
+    #[tracing::instrument]
+    async fn snapshot(
+        &self,
+        request: Request<SnapshotReq>,
+    ) -> Result<Response<SnapshotReply>, Status> {
+        let req = request.into_inner();
+        let mount = self
+            .mounts
+            .get(&req.working_copy_path)
+            .expect("Mount at working copy.");
+        todo!()
     }
 
     #[tracing::instrument]
