@@ -409,7 +409,7 @@ mod tests {
         let (end_tx, end_rx) = channel();
 
         let store = Store::new();
-        let mount_store = MountStore::new();
+        let mount_store = MountStore::new(store.clone());
         let mount_store2 = mount_store.clone();
         let mut mount_manager = crate::fs::MountManager::new(store.clone());
 
