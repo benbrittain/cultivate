@@ -120,6 +120,13 @@ impl MountStore {
         self.set_directory_content(inode, entries);
     }
 
+    pub fn create_new_node(&self, kind: FileKind) -> InodeAttributes {
+        let inode = self.allocate_inode();
+        let attrs = InodeAttributes::new(inode, kind, 0);
+        self.set_inode(attrs.clone());
+        attrs
+    }
+
     pub fn set_inode(&self, attrs: InodeAttributes) {
         let mut nodes = self.nodes.lock().unwrap();
         info!("inode: {attrs:?}");
@@ -163,6 +170,10 @@ pub(crate) struct InodeAttributes {
 }
 
 impl InodeAttributes {
+    pub fn set_hash(&mut self, hash: Id) {
+        self.hash = Some(hash)
+    }
+
     pub fn get_hash(&self) -> Option<Id> {
         self.hash
     }

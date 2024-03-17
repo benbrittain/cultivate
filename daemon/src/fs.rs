@@ -1,7 +1,7 @@
 use std::{
     cmp::min,
     ffi::OsStr,
-    io::{Cursor, Read},
+    io::{Cursor, Read, Write},
     os::unix::ffi::OsStrExt,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
@@ -11,12 +11,12 @@ use std::{
 use anyhow::{anyhow, Error};
 use fuser::{
     Filesystem, KernelConfig, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
-    ReplyEntry, ReplyOpen, Request, FUSE_ROOT_ID,
+    ReplyEntry, ReplyOpen, ReplyWrite, Request, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
 use crate::{
-    mount_store::{DirectoryDescriptor, Inode, InodeAttributes, MountStore},
+    mount_store::{DirectoryDescriptor, FileKind, Inode, InodeAttributes, MountStore},
     store::Store,
 };
 
@@ -48,6 +48,16 @@ impl CultivateFS {
         }
         Err(libc::ENOENT)
     }
+
+    //fn write_inode(&self, attrs: &InodeAttributes) {
+    //    let new_inode = self.mount_store.allocate_inode();
+    //    attrs.inode = new_inode;
+    //    //self.mount_store.set_inode(attrs)
+    //    //if let Some(attr) = self.mount_store.get_inode(inode) {
+    //    //    return Ok(attr.clone());
+    //    //}
+    //    //Err(libc::ENOENT)
+    //}
 
     //fn write_inode(&self, attrs: &InodeAttributes) {
     //    self.store.write_inode(attrs.clone())
@@ -219,6 +229,7 @@ impl Filesystem for CultivateFS {
             Err(error_code) => reply.error(error_code),
         }
     }
+
     fn open(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
         let (access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
@@ -322,21 +333,120 @@ impl Filesystem for CultivateFS {
         reply.ok();
     }
 
-    //fn write(
-    //    &mut self,
-    //    _req: &Request,
-    //    inode: u64,
-    //    fh: u64,
-    //    offset: i64,
-    //    data: &[u8],
-    //    _write_flags: u32,
-    //    #[allow(unused_variables)] flags: i32,
-    //    _lock_owner: Option<u64>,
-    //    reply: ReplyWrite,
-    //) {
-    //    dbg!("write() called with {:?} size={:?}", inode, data.len());
-    //    assert!(offset >= 0);
-    //}
+    fn write(
+        &mut self,
+        _req: &Request,
+        inode: u64,
+        fh: u64,
+        offset: i64,
+        data: &[u8],
+        _write_flags: u32,
+        #[allow(unused_variables)] flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyWrite,
+    ) {
+        info!("write() called with {:?} size={:?}", inode, data.len());
+        assert!(offset >= 0);
+        if !self.check_file_handle_write(fh) {
+            reply.error(libc::EACCES);
+            return;
+        }
+
+        // this is all a kludgy mess. Need to implement an overlay
+        // and a backend filestore
+        let mut files = self.store.files.lock().unwrap();
+        if let Some(mut attrs) = self.mount_store.get_inode(inode) {
+            let mut file = match attrs.get_hash() {
+                Some(hash) => files.get(&hash).expect("file to exist").clone(),
+                None => crate::store::File::default(),
+            };
+
+            let mut content = Cursor::new(file.content);
+            content.set_position(offset as u64);
+            content.write_all(data).unwrap();
+            file.content = content.into_inner();
+
+            let hash = file.get_hash();
+            files.insert(hash, file);
+            attrs.set_hash(hash);
+            info!("Updated inode={inode} to {attrs:?}");
+
+            self.mount_store.set_inode(attrs);
+            reply.written(data.len() as u32);
+        } else {
+            reply.error(libc::EBADF);
+        }
+    }
+
+    fn mknod(
+        &mut self,
+        req: &Request,
+        parent: u64,
+        name: &OsStr,
+        mut mode: u32,
+        _umask: u32,
+        _rdev: u32,
+        reply: ReplyEntry,
+    ) {
+        let file_type = mode & libc::S_IFMT as u32;
+        info!("mknod() called for {:?} mode={}", name, mode);
+
+        if file_type != libc::S_IFREG as u32
+            && file_type != libc::S_IFLNK as u32
+            && file_type != libc::S_IFDIR as u32
+        {
+            warn!("mknod() implementation is incomplete. Only supports regular files, symlinks, and directories. Got {:o}", mode);
+            reply.error(libc::ENOSYS);
+            return;
+        }
+
+        if self.lookup_name(parent, name).is_ok() {
+            reply.error(libc::EEXIST);
+            return;
+        }
+
+        let mut parent_attrs = match self.get_inode(parent) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        // TODO access control
+
+        // TODO last changed
+        //parent_attrs.last_modified = time_now();
+        //parent_attrs.last_metadata_changed = time_now();
+        //self.write_inode(&parent_attrs);
+
+        if req.uid() != 0 {
+            mode &= !(libc::S_ISUID | libc::S_ISGID) as u32;
+        }
+
+        let attrs = self.mount_store.create_new_node(as_file_kind(mode));
+
+        let mut entries = self.get_directory_content(parent).unwrap();
+        entries.insert(
+            name.as_bytes().to_vec(),
+            (attrs.get_inode(), attrs.get_kind()),
+        );
+        self.mount_store.set_directory_content(parent, entries);
+
+        //if as_file_kind(mode) == FileKind::Directory {
+        //    let mut entries = BTreeMap::new();
+        //    entries.insert(b".".to_vec(), (inode, FileKind::Directory));
+        //    entries.insert(b"..".to_vec(), (parent, FileKind::Directory));
+        //    self.write_directory_content(inode, entries);
+        //}
+
+        //let mut entries = self.get_directory_content(parent).unwrap();
+        //entries.insert(name.as_bytes().to_vec(), (inode, attrs.kind));
+        //self.write_directory_content(parent, entries);
+
+        // TODO: implement flags
+        reply.entry(&Duration::new(0, 0), &attrs.into(), 0);
+    }
 
     //fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
 
@@ -346,6 +456,20 @@ impl Filesystem for CultivateFS {
             Ok(attrs) => reply.attr(&Duration::new(0, 0), &attrs.into()),
             Err(error_code) => reply.error(error_code),
         }
+    }
+}
+
+fn as_file_kind(mut mode: u32) -> FileKind {
+    mode &= libc::S_IFMT as u32;
+
+    if mode == libc::S_IFREG as u32 {
+        return FileKind::File;
+    } else if mode == libc::S_IFLNK as u32 {
+        return FileKind::Symlink;
+    } else if mode == libc::S_IFDIR as u32 {
+        return FileKind::Directory;
+    } else {
+        unimplemented!("{}", mode);
     }
 }
 
@@ -394,10 +518,9 @@ impl MountManager {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, future::Future, sync::mpsc::channel};
+    use std::{fs, future::Future, io::Write, sync::mpsc::channel};
 
     use tracing_test::traced_test;
-    use walkdir::WalkDir;
 
     use super::*;
     use crate::store::{File, Tree, TreeEntry};
@@ -597,5 +720,27 @@ mod tests {
             assert_eq!(entries.len(), 2);
         })
         .await;
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn write_file_to_tree() {
+        setup_mount(|mut mount_path, store, mount_store| async move {
+            // Empty tree
+            let tree_id = store.write_tree(Tree { entries: vec![] }).await;
+            mount_store.set_root_tree(&store, tree_id);
+            mount_path.push("file1");
+            {
+                let mut file = std::fs::File::create(mount_path.clone()).unwrap();
+                file.write_all(b"Hello, world!").unwrap();
+                file.flush().unwrap();
+            }
+            {
+                let mut file = std::fs::File::open(mount_path).unwrap();
+                let mut content = String::new();
+                file.read_to_string(&mut content).unwrap();
+            }
+        })
+        .await
     }
 }
