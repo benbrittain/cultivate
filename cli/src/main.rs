@@ -65,7 +65,11 @@ fn run_cultivate_command(
             Workspace::init_with_factories(
                 command_helper.settings(),
                 wc_path,
-                &|settings, store_path| Ok(Box::new(CultivateBackend::new(settings, store_path)?)),
+                &|settings, store_path| {
+                    let mut backend = CultivateBackend::new(settings, store_path)?;
+                    backend.init(wc_path);
+                    Ok(Box::new(backend))
+                },
                 Signer::from_settings(command_helper.settings())
                     .map_err(WorkspaceInitError::SignInit)?,
                 ReadonlyRepo::default_op_store_initializer(),

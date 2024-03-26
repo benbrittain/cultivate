@@ -3,6 +3,8 @@ syntax = "proto3";
 package backend;
 
 service Backend {
+  // Initalize a new repository
+  rpc Initialize(InitializeReq) returns (InitializeReply) {}
 
   // Working copy related calls
   rpc SetCheckoutState(SetCheckoutStateReq) returns (SetCheckoutStateReply) {}
@@ -28,6 +30,12 @@ service Backend {
   rpc ReadCommit(CommitId) returns (Commit) {}
 }
 
+
+message InitializeReq {
+  string path = 1;
+}
+
+message InitializeReply {}
 
 message SnapshotReq {
   string working_copy_path = 1;

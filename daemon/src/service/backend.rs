@@ -1,28 +1,36 @@
-use std::collections::HashMap;
-
 use prost::Message;
 use proto::backend::{backend_server::Backend, *};
 use tonic::{Request, Response, Status};
 use tracing::info;
 
-use crate::{mount_store::MountStore, store::Store};
+use crate::{repo_manager::RepoManager, store::Store};
 
 #[derive(Debug)]
 pub struct BackendService {
     store: Store,
-    // TODO remove this. This is only here for some hacky testing,
-    // there should be no knowledege of individual mounts in here.
-    mounts: HashMap<String, MountStore>,
+    repo_mgr: RepoManager,
 }
 
 impl BackendService {
-    pub fn new(store: Store, mounts: HashMap<String, MountStore>) -> Self {
-        BackendService { store, mounts }
+    pub fn new(store: Store, repo_mgr: RepoManager) -> Self {
+        BackendService { store, repo_mgr }
     }
 }
 
 #[tonic::async_trait]
 impl Backend for BackendService {
+    #[tracing::instrument]
+    async fn initialize(
+        &self,
+        request: Request<InitializeReq>,
+    ) -> Result<Response<InitializeReply>, Status> {
+        let req = request.into_inner();
+        info!("Initializing a new repo at {}", req.path);
+        self.repo_mgr
+            .initialize_repo(&std::path::PathBuf::from(req.path));
+
+        Ok(Response::new(InitializeReply {}))
+    }
     #[tracing::instrument]
     async fn get_tree_state(
         &self,
@@ -30,10 +38,7 @@ impl Backend for BackendService {
     ) -> Result<Response<GetTreeStateReply>, Status> {
         info!("Getting tree state");
         let req = request.into_inner();
-        let mount = self
-            .mounts
-            .get(&req.working_copy_path)
-            .expect("Mount at working copy.");
+        let mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
         Ok(Response::new(GetTreeStateReply {
             tree_id: mount.get_tree_id().to_vec(),
         }))
@@ -46,10 +51,7 @@ impl Backend for BackendService {
     ) -> Result<Response<CheckoutState>, Status> {
         info!("Getting checkout state");
         let req = request.into_inner();
-        let mount = self
-            .mounts
-            .get(&req.working_copy_path)
-            .expect("Mount at working copy.");
+        let mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
         Ok(Response::new(CheckoutState {
             op_id: mount.get_op_id().to_vec(),
             workspace_id: mount.get_workspace_id().into(),
@@ -62,10 +64,7 @@ impl Backend for BackendService {
         request: Request<SetCheckoutStateReq>,
     ) -> Result<Response<SetCheckoutStateReply>, Status> {
         let req = request.into_inner();
-        let mount = self
-            .mounts
-            .get(&req.working_copy_path)
-            .expect("Mount at working copy.");
+        let mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
         let cs = req.checkout_state.unwrap();
         let op_id = cs.op_id.try_into().unwrap();
         let workspace_id = std::str::from_utf8(&cs.workspace_id).unwrap().to_string();
@@ -80,10 +79,7 @@ impl Backend for BackendService {
         request: Request<SnapshotReq>,
     ) -> Result<Response<SnapshotReply>, Status> {
         let req = request.into_inner();
-        let mount = self
-            .mounts
-            .get(&req.working_copy_path)
-            .expect("Mount at working copy.");
+        let _mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
         todo!()
     }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 use tracing::info;
@@ -9,9 +7,10 @@ mod service;
 #[macro_use]
 mod content_hash;
 mod mount_store;
+mod repo_manager;
 mod store;
 
-use crate::mount_store::MountStore;
+use repo_manager::RepoManager;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -31,12 +30,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // use that subscriber to process traces emitted after this point
     tracing::subscriber::set_global_default(subscriber)?;
 
-    let store = store::Store::new();
+    info!("daemon started");
 
-    info!("Starting mount manager");
-    let mut mount_manager = fs::MountManager::new(store.clone());
-    let ms = MountStore::new(store.clone());
-    mount_manager.mount("/tmp/cultivate", ms.clone())?;
+    let store = store::Store::new();
+    let repo_mgr = RepoManager::new(store.clone());
+
+    //let mut mount_manager = fs::MountManager::new(store.clone());
+    //mount_manager.mount("/tmp/cultivate", ms.clone())?;
+
+    //let ms = MountStore::new(store.clone());
     //let file_id = store
     //    .write_file(File {
     //        content: b"hello\n".to_vec(),
@@ -58,9 +60,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    let mut mounts = HashMap::new();
-    mounts.insert("/home/ben/workspace/jj-test".to_string(), ms.clone());
-    let backend = service::backend::BackendService::new(store, mounts);
+    //let mut mounts = HashMap::new();
+    //mounts.insert("/home/ben/workspace/jj-test".to_string(), ms.clone());
+    let backend = service::backend::BackendService::new(store, repo_mgr);
     let backend_svc = BackendServer::new(backend);
 
     let reflection_svc = tonic_reflection::server::Builder::configure()

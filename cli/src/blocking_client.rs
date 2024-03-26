@@ -38,6 +38,15 @@ impl BlockingBackendClient {
         rt.block_on(client.get_tree_state(request))
     }
 
+    pub fn initialize(
+        &self,
+        request: impl tonic::IntoRequest<InitializeReq>,
+    ) -> Result<tonic::Response<InitializeReply>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        let rt = self.rt.lock().unwrap();
+        rt.block_on(client.initialize(request))
+    }
+
     pub fn set_checkout_state(
         &self,
         request: impl tonic::IntoRequest<SetCheckoutStateReq>,

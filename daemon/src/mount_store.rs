@@ -80,7 +80,7 @@ impl MountStore {
         self.insert_tree(store, hash, 1)
     }
 
-    pub fn insert_file(&self, store: &Store, hash: Id, executable: bool, inode: Inode) {
+    pub fn insert_file(&self, store: &Store, hash: Id, _executable: bool, inode: Inode) {
         let file = store
             .get_file(hash)
             .expect("HashId must refer to a known file");

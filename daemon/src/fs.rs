@@ -3,15 +3,13 @@ use std::{
     ffi::OsStr,
     io::{Cursor, Read, Write},
     os::unix::ffi::OsStrExt,
-    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 
-use anyhow::{anyhow, Error};
 use fuser::{
-    Filesystem, KernelConfig, MountOption, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty,
-    ReplyEntry, ReplyOpen, ReplyWrite, Request, FUSE_ROOT_ID,
+    Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
+    ReplyOpen, ReplyWrite, Request, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
@@ -27,7 +25,7 @@ const FILE_HANDLE_READ_BIT: u64 = 1 << 63;
 const FILE_HANDLE_WRITE_BIT: u64 = 1 << 62;
 const FMODE_EXEC: i32 = 0x20;
 
-struct CultivateFS {
+pub struct CultivateFS {
     store: Store,
     mount_store: MountStore,
     next_file_handle: AtomicU64,
@@ -112,7 +110,7 @@ impl CultivateFS {
 }
 
 impl Filesystem for CultivateFS {
-    fn lookup(&mut self, req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
         info!("Lookup {name:?} parent={parent}");
         // TODO define actual length
         if name.len() > 40 as usize {
@@ -131,7 +129,7 @@ impl Filesystem for CultivateFS {
 
     fn init(
         &mut self,
-        req: &Request,
+        _req: &Request,
         #[allow(unused_variables)] config: &mut KernelConfig,
     ) -> Result<(), libc::c_int> {
         if self.get_inode(FUSE_ROOT_ID).is_err() {
@@ -188,9 +186,9 @@ impl Filesystem for CultivateFS {
         reply.ok();
     }
 
-    fn opendir(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
+    fn opendir(&mut self, _req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
         error!("opendir() called on {:?}", inode);
-        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
+        let (_access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
                 // Behavior is undefined, but most filesystems return EACCES
                 if flags & libc::O_TRUNC != 0 {
@@ -230,8 +228,8 @@ impl Filesystem for CultivateFS {
         }
     }
 
-    fn open(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
-        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
+    fn open(&mut self, _req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
+        let (_access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
                 // Behavior is undefined, but most filesystems return EACCES
                 if flags & libc::O_TRUNC != 0 {
@@ -405,7 +403,7 @@ impl Filesystem for CultivateFS {
             return;
         }
 
-        let mut parent_attrs = match self.get_inode(parent) {
+        let _parent_attrs = match self.get_inode(parent) {
             Ok(attrs) => attrs,
             Err(error_code) => {
                 reply.error(error_code);
@@ -470,49 +468,6 @@ fn as_file_kind(mut mode: u32) -> FileKind {
         return FileKind::Directory;
     } else {
         unimplemented!("{}", mode);
-    }
-}
-
-pub struct MountManager {
-    store: Store,
-    mounts: Vec<fuser::BackgroundSession>,
-}
-
-impl MountManager {
-    pub fn new(store: Store) -> Self {
-        MountManager {
-            store,
-            mounts: vec![],
-        }
-    }
-
-    pub fn mount<P: Into<PathBuf> + std::fmt::Debug>(
-        &mut self,
-        mountpoint: P,
-        mount_store: MountStore,
-    ) -> Result<fuser::Notifier, Error> {
-        let mountpoint = mountpoint.into();
-
-        let options = vec![
-            MountOption::FSName("cultivate".to_string()),
-            MountOption::AutoUnmount,
-            MountOption::NoDev,
-            MountOption::Exec,
-            MountOption::NoSuid,
-        ];
-        if mountpoint.is_dir() {
-            let session = fuser::Session::new(
-                CultivateFS::new(self.store.clone(), mount_store),
-                &mountpoint,
-                &options,
-            )?;
-            let notifier = session.notifier();
-            let bg = session.spawn().unwrap();
-            self.mounts.push(bg);
-            Ok(notifier)
-        } else {
-            Err(anyhow!("No directory to mount filesystem at exists"))
-        }
     }
 }
 

@@ -167,8 +167,8 @@ impl CultivateWorkingCopy {
         DaemonLock::new()
     }
 
-    fn snapshot(&mut self, options: SnapshotOptions) -> TreeState {
-        let mut tree_state = self
+    fn snapshot(&mut self, _options: SnapshotOptions) -> TreeState {
+        let tree_state = self
             .tree_state
             .get()
             .expect("Treestate should have been initalized");
@@ -268,11 +268,11 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
     }
 
     fn check_out(&mut self, commit: &Commit) -> Result<CheckoutStats, CheckoutError> {
-        let new_tree = commit.tree()?;
+        let _new_tree = commit.tree()?;
         todo!()
     }
 
-    fn reset(&mut self, commit: &Commit) -> Result<(), ResetError> {
+    fn reset(&mut self, _commit: &Commit) -> Result<(), ResetError> {
         todo!()
     }
 

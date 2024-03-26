@@ -19,13 +19,13 @@ use jj_lib::{
     settings::UserSettings,
 };
 use prost::Message;
+use tracing::info;
 
 use crate::blocking_client::BlockingBackendClient;
 
 const COMMIT_ID_LENGTH: usize = 32;
 const CHANGE_ID_LENGTH: usize = 16;
 
-/// A commit backend that's extremely similar to the
 #[derive(Debug)]
 pub struct CultivateBackend {
     client: BlockingBackendClient,
@@ -52,6 +52,15 @@ impl CultivateBackend {
             root_change_id,
             empty_tree_id,
         })
+    }
+
+    pub fn init(&mut self, working_copy_path: &Path) {
+        info!("Working copy path: {working_copy_path:?}");
+        self.client
+            .initialize(proto::backend::InitializeReq {
+                path: working_copy_path.as_os_str().to_str().unwrap().to_string(),
+            })
+            .unwrap();
     }
 }
 
