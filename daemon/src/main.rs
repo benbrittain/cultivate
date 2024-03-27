@@ -60,8 +60,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let control = service::control::ControlService {};
     let control_svc = ControlServer::new(control);
 
-    //let mut mounts = HashMap::new();
-    //mounts.insert("/home/ben/workspace/jj-test".to_string(), ms.clone());
     let backend = service::backend::BackendService::new(store, repo_mgr);
     let backend_svc = BackendServer::new(backend);
 
