@@ -197,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn write_commit_parents() {
         let store = Store::new();
-        let backend = BackendService::new(store, Default::default());
+        let backend = BackendService::new(store.clone(), RepoManager::new(store));
         let mut commit = Commit::default();
 
         // No parents

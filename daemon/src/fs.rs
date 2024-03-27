@@ -473,7 +473,7 @@ fn as_file_kind(mut mode: u32) -> FileKind {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, future::Future, io::Write, sync::mpsc::channel};
+    use std::{fs, future::Future, io::Write, path::PathBuf, sync::mpsc::channel};
 
     use tracing_test::traced_test;
 
@@ -487,16 +487,16 @@ mod tests {
         let (end_tx, end_rx) = channel();
 
         let store = Store::new();
-        let mount_store = MountStore::new(store.clone());
-        let mount_store2 = mount_store.clone();
-        let mut mount_manager = crate::fs::MountManager::new(store.clone());
+        let repo_manager = crate::repo_manager::RepoManager::new(store.clone());
+        let repo_manager2 = repo_manager.clone();
 
         let tmp_dir = tempdir::TempDir::new("cultivate-test").unwrap();
         let tmp_dir_path = tmp_dir.path().to_path_buf();
         let tmp_dir_path2 = tmp_dir.path().to_path_buf();
+        let tmp_dir_path3 = tmp_dir.path().to_path_buf();
         let handler = std::thread::spawn(move || {
             // Mount the vfs.
-            mount_manager.mount(tmp_dir_path, mount_store2).unwrap();
+            repo_manager2.initialize_repo(&tmp_dir_path);
 
             // Let the closure run.
             start_tx.send(()).unwrap();
@@ -505,12 +505,13 @@ mod tests {
             let _ = end_rx.recv();
 
             // Clean up the mount.
-            drop(mount_manager);
+            repo_manager2.deinit_repo(&tmp_dir_path);
             tmp_dir.close().unwrap()
         });
 
         // Run the closure after the filesystem is mounted.
         let _: () = start_rx.recv().unwrap();
+        let mount_store = repo_manager.get(tmp_dir_path3.to_str().unwrap()).unwrap();
         func(tmp_dir_path2, store, mount_store).await;
 
         // Signal time to cleanup file system.

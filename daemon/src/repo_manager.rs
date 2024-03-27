@@ -9,7 +9,7 @@ use tracing::info;
 
 use crate::{mount_store::MountStore, store::Store};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RepoManager {
     store: Store,
     mounts: Arc<Mutex<HashMap<String, MountStore>>>,
@@ -68,6 +68,11 @@ impl RepoManager {
         let bg = session.spawn().unwrap();
         let mut fuse_sessions = self.fuse_sessions.lock().unwrap();
         fuse_sessions.push(bg);
-        info!("Initialized {mountpoint:?}.")
+    }
+
+    pub fn deinit_repo(&self, _mountpoint: &Path) {
+        tracing::warn!("De-init ALL repos");
+        let mut fuse_sessions = self.fuse_sessions.lock().unwrap();
+        fuse_sessions.clear();
     }
 }
