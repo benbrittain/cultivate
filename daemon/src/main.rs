@@ -34,11 +34,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let store = store::Store::new();
     let repo_mgr = RepoManager::new(store.clone());
-
-    //let mut mount_manager = fs::MountManager::new(store.clone());
-    //mount_manager.mount("/tmp/cultivate", ms.clone())?;
-
-    //let ms = MountStore::new(store.clone());
     //let file_id = store
     //    .write_file(File {
     //        content: b"hello\n".to_vec(),

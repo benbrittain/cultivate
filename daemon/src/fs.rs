@@ -354,10 +354,17 @@ impl Filesystem for CultivateFS {
         // and a backend filestore
         let mut files = self.store.files.lock().unwrap();
         if let Some(mut attrs) = self.mount_store.get_inode(inode) {
+            warn!("attributes: {:#?}", attrs.clone());
             let mut file = match attrs.get_hash() {
                 Some(hash) => files.get(&hash).expect("file to exist").clone(),
                 None => crate::store::File::default(),
             };
+
+            attrs.update_last_modified();
+            attrs.update_last_metadata_changed();
+            if data.len() + offset as usize > attrs.get_size() as usize {
+                attrs.set_size((data.len() + offset as usize) as u64);
+            }
 
             let mut content = Cursor::new(file.content);
             content.set_position(offset as u64);
@@ -366,10 +373,12 @@ impl Filesystem for CultivateFS {
 
             let hash = file.get_hash();
             files.insert(hash, file);
+            // there is no GC mechanism right now
             attrs.set_hash(hash);
             info!("Updated inode={inode} to {attrs:?}");
 
-            self.mount_store.set_inode(attrs);
+            self.mount_store.set_inode(attrs.clone());
+            warn!("modified attributes: {:#?}", attrs.clone());
             reply.written(data.len() as u32);
         } else {
             reply.error(libc::EBADF);
@@ -403,7 +412,7 @@ impl Filesystem for CultivateFS {
             return;
         }
 
-        let _parent_attrs = match self.get_inode(parent) {
+        let mut parent_attrs = match self.get_inode(parent) {
             Ok(attrs) => attrs,
             Err(error_code) => {
                 reply.error(error_code);
@@ -413,10 +422,9 @@ impl Filesystem for CultivateFS {
 
         // TODO access control
 
-        // TODO last changed
-        //parent_attrs.last_modified = time_now();
-        //parent_attrs.last_metadata_changed = time_now();
-        //self.write_inode(&parent_attrs);
+        parent_attrs.update_last_modified();
+        parent_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(parent_attrs);
 
         if req.uid() != 0 {
             mode &= !(libc::S_ISUID | libc::S_ISGID) as u32;
@@ -688,13 +696,14 @@ mod tests {
             mount_path.push("file1");
             {
                 let mut file = std::fs::File::create(mount_path.clone()).unwrap();
-                file.write_all(b"Hello, world!").unwrap();
+                file.write_all(b"The Last Yak").unwrap();
                 file.flush().unwrap();
             }
             {
                 let mut file = std::fs::File::open(mount_path).unwrap();
-                let mut content = String::new();
-                file.read_to_string(&mut content).unwrap();
+                let mut content = vec![];
+                file.read_to_end(&mut content).unwrap();
+                assert_eq!(content, b"The Last Yak")
             }
         })
         .await

@@ -190,6 +190,10 @@ impl InodeAttributes {
         self.size
     }
 
+    pub fn set_size(&mut self, size: u64) {
+        self.size = size
+    }
+
     pub fn get_last_metadata_changed(&self) -> (i64, u32) {
         self.last_metadata_changed
     }
@@ -216,6 +220,13 @@ impl InodeAttributes {
 
     pub fn get_kind(&self) -> FileKind {
         self.kind
+    }
+
+    pub fn update_last_modified(&mut self) {
+        self.last_modified = time_now();
+    }
+    pub fn update_last_metadata_changed(&mut self) {
+        self.last_metadata_changed = time_now();
     }
 
     pub fn new(inode: Inode, kind: FileKind, size: u64) -> InodeAttributes {
