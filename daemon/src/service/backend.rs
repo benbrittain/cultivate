@@ -80,6 +80,7 @@ impl Backend for BackendService {
     ) -> Result<Response<SnapshotReply>, Status> {
         let req = request.into_inner();
         let mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
+        //        mount.snapshot().unwrap();
         let tree_id = mount.get_tree_id();
         Ok(Response::new(SnapshotReply {
             tree_id: tree_id.into(),
