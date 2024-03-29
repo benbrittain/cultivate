@@ -18,7 +18,9 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use proto::backend::{GetCheckoutStateReq, GetTreeStateReq};
+use proto::backend::{
+    GetCheckoutStateReq, GetTreeStateReply, GetTreeStateReq, SnapshotReply, SnapshotReq,
+};
 use tracing::{error, info, warn};
 
 use crate::blocking_client::BlockingBackendClient;
@@ -169,11 +171,17 @@ impl CultivateWorkingCopy {
 
     fn snapshot(&mut self, _options: SnapshotOptions) -> TreeState {
         let tree_state = self
-            .tree_state
-            .get()
-            .expect("Treestate should have been initalized");
-        error!("snapshot not implemented");
-        tree_state.clone()
+            .client
+            .snapshot(SnapshotReq {
+                working_copy_path: self.working_copy_path.to_str().unwrap().to_string(),
+            })
+            .unwrap()
+            .into_inner();
+        let tree_ids_builder: MergeBuilder<TreeId> =
+            MergeBuilder::from_iter([TreeId::new(tree_state.tree_id)]);
+        TreeState {
+            tree_id: MergedTreeId::Merge(tree_ids_builder.build()),
+        }
     }
 }
 

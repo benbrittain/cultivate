@@ -129,7 +129,6 @@ impl MountStore {
 
     pub fn set_inode(&self, attrs: InodeAttributes) {
         let mut nodes = self.nodes.lock().unwrap();
-        info!("inode: {attrs:?}");
         nodes.insert(attrs.inode, attrs);
     }
 
@@ -141,7 +140,6 @@ impl MountStore {
     pub fn get_directory_content(&self, inode: Inode) -> Option<DirectoryDescriptor> {
         let directories = self.directories.lock().unwrap();
         let dirs = directories.get(&inode).cloned();
-        info!("dirs: {dirs:?}");
         dirs
     }
 
@@ -155,7 +153,7 @@ impl MountStore {
 pub(crate) struct InodeAttributes {
     inode: Inode,
     hash: Option<Id>,
-    pub open_file_handles: u64, // Ref count of open file handles to this inode
+    open_file_handles: u64, // Ref count of open file handles to this inode
     size: u64,
     last_accessed: (i64, u32),
     last_modified: (i64, u32),
@@ -170,6 +168,26 @@ pub(crate) struct InodeAttributes {
 }
 
 impl InodeAttributes {
+    // TODO this should really be attached to the lifetime
+    // of some data.
+    pub fn inc_file_handle(&mut self) {
+        let prior = self.open_file_handles;
+        self.open_file_handles += 1;
+        info!(
+            "{} open file handles: {}->{}",
+            self.inode, prior, self.open_file_handles
+        );
+    }
+
+    pub fn dec_file_handle(&mut self) {
+        let prior = self.open_file_handles;
+        self.open_file_handles -= 1;
+        info!(
+            "{} open file handles: {}->{}",
+            self.inode, prior, self.open_file_handles
+        );
+    }
+
     pub fn set_hash(&mut self, hash: Id) {
         self.hash = Some(hash)
     }
@@ -214,6 +232,14 @@ impl InodeAttributes {
         self.uid
     }
 
+    pub fn set_uid(&mut self, uid: u32) {
+        self.uid = uid
+    }
+
+    pub fn set_gid(&mut self, gid: u32) {
+        self.gid = gid
+    }
+
     pub fn get_gid(&self) -> u32 {
         self.gid
     }
@@ -231,6 +257,11 @@ impl InodeAttributes {
 
     pub fn new(inode: Inode, kind: FileKind, size: u64) -> InodeAttributes {
         assert!((kind == FileKind::Directory) && (size == 0) || kind == FileKind::File);
+        let hardlinks = match kind {
+            FileKind::File => 1,
+            FileKind::Directory => 2,
+            _ => todo!(),
+        };
         InodeAttributes {
             inode,
             hash: None,
@@ -241,7 +272,7 @@ impl InodeAttributes {
             last_metadata_changed: time_now(),
             kind,
             mode: 0o777,
-            hardlinks: 2,
+            hardlinks,
             uid: 0,
             gid: 0,
             xattrs: Default::default(),

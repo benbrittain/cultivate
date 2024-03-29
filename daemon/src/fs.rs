@@ -4,12 +4,12 @@ use std::{
     io::{Cursor, Read, Write},
     os::unix::ffi::OsStrExt,
     sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use fuser::{
     Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
-    ReplyOpen, ReplyWrite, Request, FUSE_ROOT_ID,
+    ReplyOpen, ReplyWrite, Request, TimeOrNow, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
@@ -68,7 +68,6 @@ impl CultivateFS {
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
         info!("Get directory contents for {inode}");
         if let Some(attr) = self.mount_store.get_directory_content(inode) {
-            info!("attr: {attr:#?}");
             return Ok(attr.clone());
         }
         Err(libc::ENOENT)
@@ -79,7 +78,6 @@ impl CultivateFS {
         let entries = self.get_directory_content(parent)?;
         if let Some((inode, _)) = entries.get(name.as_bytes()) {
             let inode = self.get_inode(*inode);
-            info!("found: {inode:?}");
             inode
         } else {
             Err(libc::ENOENT)
@@ -96,7 +94,6 @@ impl CultivateFS {
         if write {
             fh |= FILE_HANDLE_WRITE_BIT;
         }
-
         fh
     }
 
@@ -139,15 +136,28 @@ impl Filesystem for CultivateFS {
         Ok(())
     }
 
+    fn setxattr(
+        &mut self,
+        _request: &Request<'_>,
+        _inode: u64,
+        _key: &OsStr,
+        _value: &[u8],
+        _flags: i32,
+        _position: u32,
+        _reply: ReplyEmpty,
+    ) {
+        todo!();
+    }
+
     //fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
     //    dbg!("statfs() implementation is a stub");
     //}
 
-    //fn access(&mut self, req: &Request, inode: u64, mask: i32, reply: ReplyEmpty) {
-    //    dbg!("access() called with {:?} {:?}", inode, mask);
-    //    // TODO access control
-    //    reply.ok();
-    //}
+    fn access(&mut self, req: &Request, inode: u64, mask: i32, reply: ReplyEmpty) {
+        info!("access() called with {:?} {:?}", inode, mask);
+        // TODO access control
+        reply.ok();
+    }
 
     fn readdir(
         &mut self,
@@ -186,9 +196,9 @@ impl Filesystem for CultivateFS {
         reply.ok();
     }
 
-    fn opendir(&mut self, _req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
+    fn opendir(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
         error!("opendir() called on {:?}", inode);
-        let (_access_mask, read, write) = match flags & libc::O_ACCMODE {
+        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
                 // Behavior is undefined, but most filesystems return EACCES
                 if flags & libc::O_TRUNC != 0 {
@@ -207,29 +217,34 @@ impl Filesystem for CultivateFS {
         };
         match self.get_inode(inode) {
             Ok(mut attr) => {
-                //if check_access(
-                //    attr.uid,
-                //    attr.gid,
-                //    attr.mode,
-                //    req.uid(),
-                //    req.gid(),
-                //    access_mask,
-                //) {
-                attr.open_file_handles += 1;
-                self.mount_store.set_inode(attr);
-                let open_flags = 0;
-                reply.opened(self.allocate_next_file_handle(read, write), open_flags);
-                //} else {
-                //    reply.error(libc::EACCES);
-                //}
+                if check_access(
+                    attr.get_uid(),
+                    attr.get_gid(),
+                    attr.get_mode(),
+                    req.uid(),
+                    req.gid(),
+                    access_mask,
+                ) {
+                    attr.inc_file_handle();
+                    self.mount_store.set_inode(attr);
+                    let open_flags = 0;
+                    let fh = self.allocate_next_file_handle(read, write);
+                    info!("file handle: {}", fh);
+                    info!("file handle read: {}", self.check_file_handle_read(fh));
+                    info!("file handle write: {}", self.check_file_handle_write(fh));
+                    reply.opened(fh, open_flags);
+                } else {
+                    reply.error(libc::EACCES);
+                }
                 return;
             }
             Err(error_code) => reply.error(error_code),
         }
     }
 
-    fn open(&mut self, _req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
-        let (_access_mask, read, write) = match flags & libc::O_ACCMODE {
+    fn open(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
+        info!("open() called for {:?}", inode);
+        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
                 // Behavior is undefined, but most filesystems return EACCES
                 if flags & libc::O_TRUNC != 0 {
@@ -254,25 +269,75 @@ impl Filesystem for CultivateFS {
 
         match self.get_inode(inode) {
             Ok(mut attr) => {
-                //if check_access(
-                //    attr.uid,
-                //    attr.gid,
-                //    attr.mode,
-                //    req.uid(),
-                //    req.gid(),
-                //    access_mask,
-                //) {
-                attr.open_file_handles += 1;
-                self.mount_store.set_inode(attr);
-                let open_flags = 0;
-                reply.opened(self.allocate_next_file_handle(read, write), open_flags);
-                //} else {
-                //    reply.error(libc::EACCES);
-                //}
+                info!("Requested inode: {:#?}", attr.clone());
+                if check_access(
+                    attr.get_uid(),
+                    attr.get_gid(),
+                    attr.get_mode(),
+                    req.uid(),
+                    req.gid(),
+                    access_mask,
+                ) {
+                    attr.inc_file_handle();
+                    self.mount_store.set_inode(attr);
+                    let open_flags = 0;
+                    let fh = self.allocate_next_file_handle(read, write);
+                    info!("file handle: {}", fh);
+                    info!("file handle read: {}", self.check_file_handle_read(fh));
+                    info!("file handle write: {}", self.check_file_handle_write(fh));
+                    reply.opened(fh, open_flags);
+                } else {
+                    reply.error(libc::EACCES);
+                }
                 return;
             }
             Err(error_code) => reply.error(error_code),
         }
+    }
+
+    fn setattr(
+        &mut self,
+        _req: &Request,
+        inode: u64,
+        _mode: Option<u32>,
+        _uid: Option<u32>,
+        _gid: Option<u32>,
+        _size: Option<u64>,
+        _atime: Option<TimeOrNow>,
+        _mtime: Option<TimeOrNow>,
+        _ctime: Option<SystemTime>,
+        _fh: Option<u64>,
+        _crtime: Option<SystemTime>,
+        _chgtime: Option<SystemTime>,
+        _bkuptime: Option<SystemTime>,
+        _flags: Option<u32>,
+        reply: ReplyAttr,
+    ) {
+        let mut attrs = match self.get_inode(inode) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+        error!("Setattr not implemented");
+        let attrs = self.get_inode(inode).unwrap();
+        reply.attr(&Duration::new(0, 0), &attrs.into());
+    }
+
+    fn link(
+        &mut self,
+        _req: &Request,
+        inode: u64,
+        new_parent: u64,
+        new_name: &OsStr,
+        _reply: ReplyEntry,
+    ) {
+        info!(
+            "link() called for {}, {}, {:?}",
+            inode, new_parent, new_name
+        );
+        todo!()
     }
 
     fn read(
@@ -314,6 +379,21 @@ impl Filesystem for CultivateFS {
         }
     }
 
+    fn releasedir(
+        &mut self,
+        _req: &Request<'_>,
+        inode: u64,
+        _fh: u64,
+        _flags: i32,
+        reply: ReplyEmpty,
+    ) {
+        if let Ok(mut attrs) = self.get_inode(inode) {
+            attrs.dec_file_handle();
+            self.mount_store.set_inode(attrs);
+        }
+        reply.ok();
+    }
+
     fn release(
         &mut self,
         _req: &Request<'_>,
@@ -325,7 +405,7 @@ impl Filesystem for CultivateFS {
         reply: ReplyEmpty,
     ) {
         if let Ok(mut attrs) = self.get_inode(inode) {
-            attrs.open_file_handles -= 1;
+            attrs.dec_file_handle();
             self.mount_store.set_inode(attrs);
         }
         reply.ok();
@@ -385,6 +465,24 @@ impl Filesystem for CultivateFS {
         }
     }
 
+    //fn create(
+    //    &mut self,
+    //    req: &Request,
+    //    parent: u64,
+    //    name: &OsStr,
+    //    mut mode: u32,
+    //    _umask: u32,
+    //    flags: i32,
+    //    reply: ReplyCreate,
+    //) {
+    //    warn!("create() called with {:?} {:?}", parent, name);
+    //    if self.lookup_name(parent, name).is_ok() {
+    //        reply.error(libc::EEXIST);
+    //        return;
+    //    }
+    //    todo!()
+    //}
+
     fn mknod(
         &mut self,
         req: &Request,
@@ -424,13 +522,17 @@ impl Filesystem for CultivateFS {
 
         parent_attrs.update_last_modified();
         parent_attrs.update_last_metadata_changed();
-        self.mount_store.set_inode(parent_attrs);
+        self.mount_store.set_inode(parent_attrs.clone());
 
         if req.uid() != 0 {
             mode &= !(libc::S_ISUID | libc::S_ISGID) as u32;
         }
 
-        let attrs = self.mount_store.create_new_node(as_file_kind(mode));
+        let mut attrs = self.mount_store.create_new_node(as_file_kind(mode));
+        // should this go in create new node? requires the Request
+        attrs.set_uid(req.uid());
+        attrs.set_gid(creation_gid(&parent_attrs, req.gid()));
+        self.mount_store.set_inode(attrs.clone());
 
         let mut entries = self.get_directory_content(parent).unwrap();
         entries.insert(
@@ -465,6 +567,14 @@ impl Filesystem for CultivateFS {
     }
 }
 
+fn creation_gid(parent: &InodeAttributes, gid: u32) -> u32 {
+    if parent.get_mode() & libc::S_ISGID as u16 != 0 {
+        return parent.get_gid();
+    }
+
+    gid
+}
+
 fn as_file_kind(mut mode: u32) -> FileKind {
     mode &= libc::S_IFMT as u32;
 
@@ -477,6 +587,41 @@ fn as_file_kind(mut mode: u32) -> FileKind {
     } else {
         unimplemented!("{}", mode);
     }
+}
+
+pub fn check_access(
+    file_uid: u32,
+    file_gid: u32,
+    file_mode: u16,
+    uid: u32,
+    gid: u32,
+    mut access_mask: i32,
+) -> bool {
+    // F_OK tests for existence of file
+    if access_mask == libc::F_OK {
+        return true;
+    }
+    let file_mode = i32::from(file_mode);
+
+    // root is allowed to read & write anything
+    if uid == 0 {
+        // root only allowed to exec if one of the X bits is set
+        access_mask &= libc::X_OK;
+        access_mask -= access_mask & (file_mode >> 6);
+        access_mask -= access_mask & (file_mode >> 3);
+        access_mask -= access_mask & file_mode;
+        return access_mask == 0;
+    }
+
+    if uid == file_uid {
+        access_mask -= access_mask & (file_mode >> 6);
+    } else if gid == file_gid {
+        access_mask -= access_mask & (file_mode >> 3);
+    } else {
+        access_mask -= access_mask & file_mode;
+    }
+
+    return access_mask == 0;
 }
 
 #[cfg(test)]
@@ -704,6 +849,38 @@ mod tests {
                 let mut content = vec![];
                 file.read_to_end(&mut content).unwrap();
                 assert_eq!(content, b"The Last Yak")
+            }
+        })
+        .await
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn append_to_file_in_tree() {
+        setup_mount(|mut mount_path, store, mount_store| async move {
+            // Empty tree
+            let tree_id = store.write_tree(Tree { entries: vec![] }).await;
+            mount_store.set_root_tree(&store, tree_id);
+            mount_path.push("file1");
+            {
+                let mut file = std::fs::File::create(mount_path.clone()).unwrap();
+                file.write_all(b"The Last Yak ").unwrap();
+                file.flush().unwrap();
+            }
+            {
+                let mut file = std::fs::OpenOptions::new()
+                    .append(true)
+                    .write(true)
+                    .open(mount_path.clone())
+                    .unwrap();
+                file.write_all(b"to be shaved").unwrap();
+                file.flush().unwrap();
+            }
+            {
+                let mut file = std::fs::File::open(mount_path).unwrap();
+                let mut content = vec![];
+                file.read_to_end(&mut content).unwrap();
+                assert_eq!(content, b"The Last Yak to be shaved")
             }
         })
         .await

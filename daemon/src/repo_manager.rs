@@ -59,7 +59,7 @@ impl RepoManager {
         );
         // TODO Remove this! The mountpoint needs to be in the intended
         // working directory someday.
-        let mountpoint = Path::new("/tmp/cultivate");
+        //let mountpoint = Path::new("/tmp/cultivate");
         let session = fuser::Session::new(
             crate::fs::CultivateFS::new(self.store.clone(), mount_store),
             &mountpoint,
