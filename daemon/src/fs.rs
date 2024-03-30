@@ -3,6 +3,7 @@ use std::{
     ffi::OsStr,
     io::{Cursor, Read, Write},
     os::unix::ffi::OsStrExt,
+    path::Path,
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime},
 };
@@ -47,24 +48,6 @@ impl CultivateFS {
         Err(libc::ENOENT)
     }
 
-    //fn write_inode(&self, attrs: &InodeAttributes) {
-    //    let new_inode = self.mount_store.allocate_inode();
-    //    attrs.inode = new_inode;
-    //    //self.mount_store.set_inode(attrs)
-    //    //if let Some(attr) = self.mount_store.get_inode(inode) {
-    //    //    return Ok(attr.clone());
-    //    //}
-    //    //Err(libc::ENOENT)
-    //}
-
-    //fn write_inode(&self, attrs: &InodeAttributes) {
-    //    self.store.write_inode(attrs.clone())
-    //}
-
-    //fn write_directory_content(&self, inode: Inode, entries: DirectoryDescriptor) {
-    //    self.store.write_directory_content(inode.clone(), entries)
-    //}
-
     fn get_directory_content(&self, inode: Inode) -> Result<DirectoryDescriptor, libc::c_int> {
         info!("Get directory contents for {inode}");
         if let Some(attr) = self.mount_store.get_directory_content(inode) {
@@ -103,6 +86,41 @@ impl CultivateFS {
 
     fn check_file_handle_write(&self, file_handle: u64) -> bool {
         (file_handle & FILE_HANDLE_WRITE_BIT) != 0
+    }
+
+    fn insert_link(
+        &self,
+        req: &Request,
+        parent: u64,
+        name: &OsStr,
+        inode: u64,
+        kind: FileKind,
+    ) -> Result<(), libc::c_int> {
+        if self.lookup_name(parent, name).is_ok() {
+            return Err(libc::EEXIST);
+        }
+
+        let mut parent_attrs = self.get_inode(parent)?;
+
+        if !check_access(
+            parent_attrs.get_uid(),
+            parent_attrs.get_gid(),
+            parent_attrs.get_mode(),
+            req.uid(),
+            req.gid(),
+            libc::W_OK,
+        ) {
+            return Err(libc::EACCES);
+        }
+        parent_attrs.update_last_modified();
+        parent_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(parent_attrs);
+
+        let mut entries = self.get_directory_content(parent).unwrap();
+        entries.insert(name.as_bytes().to_vec(), (inode, kind));
+        self.mount_store.set_directory_content(parent, entries);
+
+        Ok(())
     }
 }
 
@@ -149,9 +167,9 @@ impl Filesystem for CultivateFS {
         todo!();
     }
 
-    //fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-    //    dbg!("statfs() implementation is a stub");
-    //}
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+        warn!("statfs() implementation is a stub");
+    }
 
     fn access(&mut self, req: &Request, inode: u64, mask: i32, reply: ReplyEmpty) {
         info!("access() called with {:?} {:?}", inode, mask);
@@ -463,6 +481,79 @@ impl Filesystem for CultivateFS {
         } else {
             reply.error(libc::EBADF);
         }
+    }
+
+    fn readlink(&mut self, _req: &Request, inode: u64, reply: ReplyData) {
+        info!("readlink() called on {:?}", inode);
+        if let Some(attr) = self.mount_store.get_inode(inode) {
+            let hash = attr.get_hash().unwrap();
+            let symlink = self
+                .store
+                .get_symlink(hash)
+                .expect("There should be a symlink in the store");
+            let size = symlink.target.len();
+            info!("readlink {symlink:?}");
+            return reply.data(&symlink.target.as_bytes());
+        }
+        reply.error(libc::ENOENT);
+    }
+
+    fn symlink(
+        &mut self,
+        req: &Request,
+        parent: u64,
+        link_name: &OsStr,
+        target: &Path,
+        reply: ReplyEntry,
+    ) {
+        info!(
+            "symlink() called with {:?} {:?} {:?}",
+            parent, link_name, target
+        );
+        let mut parent_attrs = match self.get_inode(parent) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        if !check_access(
+            parent_attrs.get_uid(),
+            parent_attrs.get_gid(),
+            parent_attrs.get_mode(),
+            req.uid(),
+            req.gid(),
+            libc::W_OK,
+        ) {
+            reply.error(libc::EACCES);
+            return;
+        }
+        parent_attrs.update_last_modified();
+        parent_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(parent_attrs.clone());
+
+        let mut attrs = self.mount_store.create_new_node(FileKind::Symlink);
+        attrs.set_uid(req.uid());
+        attrs.set_gid(creation_gid(&parent_attrs, req.gid()));
+        attrs.set_size(target.as_os_str().as_bytes().len() as u64);
+
+        if let Err(error_code) =
+            self.insert_link(req, parent, link_name, attrs.get_inode(), FileKind::Symlink)
+        {
+            reply.error(error_code);
+            return;
+        }
+
+        let mut symlinks = self.store.symlinks.lock().unwrap();
+        let mut symlink = crate::store::Symlink::default();
+        symlink.target = target.to_str().unwrap().to_string();
+        let hash = symlink.get_hash();
+        symlinks.insert(hash, symlink);
+        attrs.set_hash(hash);
+        self.mount_store.set_inode(attrs.clone());
+
+        reply.entry(&Duration::new(0, 0), &attrs.into(), 0);
     }
 
     //fn create(
@@ -850,6 +941,27 @@ mod tests {
                 file.read_to_end(&mut content).unwrap();
                 assert_eq!(content, b"The Last Yak")
             }
+        })
+        .await
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn write_symlink() {
+        setup_mount(|mut mount_path, store, mount_store| async move {
+            // Empty tree
+            let tree_id = store.write_tree(Tree { entries: vec![] }).await;
+            mount_store.set_root_tree(&store, tree_id);
+            let mut src = mount_path.clone();
+            src.push("a.txt");
+            let mut file = std::fs::File::create(src.clone()).unwrap();
+            file.write_all(b"The Last Yak").unwrap();
+            file.flush().unwrap();
+            let mut target = mount_path.clone();
+            target.push("b.txt");
+            std::os::unix::fs::symlink(src.clone(), target.clone()).unwrap();
+            let path = fs::read_link(target).unwrap();
+            assert_eq!(path, src)
         })
         .await
     }

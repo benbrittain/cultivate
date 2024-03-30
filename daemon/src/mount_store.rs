@@ -256,11 +256,15 @@ impl InodeAttributes {
     }
 
     pub fn new(inode: Inode, kind: FileKind, size: u64) -> InodeAttributes {
-        assert!((kind == FileKind::Directory) && (size == 0) || kind == FileKind::File);
+        assert!(
+            (kind == FileKind::Directory) && (size == 0)
+                || kind == FileKind::File
+                || kind == FileKind::Symlink
+        );
         let hardlinks = match kind {
             FileKind::File => 1,
             FileKind::Directory => 2,
-            _ => todo!(),
+            FileKind::Symlink => 1,
         };
         InodeAttributes {
             inode,
