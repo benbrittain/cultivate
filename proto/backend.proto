@@ -16,15 +16,17 @@ service Backend {
 
   // Store related calls
   rpc Concurrency(ConcurrencyRequest) returns (ConcurrencyReply) {}
-  rpc WriteSymlink(WriteSymlinkRequest) returns (WriteSymlinkReply) {}
-  rpc ReadSymlink(ReadSymlinkRequest) returns (ReadSymlinkReply) {}
+
+  rpc GetEmptyTreeId(GetEmptyTreeIdReq) returns (TreeId) {}
+
+  rpc WriteTree(Tree) returns (TreeId) {}
+  rpc ReadTree(TreeId) returns (Tree) {}
 
   rpc WriteFile(File) returns (FileId) {}
   rpc ReadFile(FileId) returns (File) {}
 
-  rpc GetEmptyTreeId(GetEmptyTreeIdReq) returns (TreeId) {}
-  rpc WriteTree(Tree) returns (TreeId) {}
-  rpc ReadTree(TreeId) returns (Tree) {}
+  rpc WriteSymlink(Symlink) returns (SymlinkId) {}
+  rpc ReadSymlink(SymlinkId) returns (Symlink) {}
 
   rpc WriteCommit(Commit) returns (CommitId) {}
   rpc ReadCommit(CommitId) returns (Commit) {}
@@ -87,15 +89,12 @@ message File {
 
 // Symlink
 
-message WriteSymlinkRequest {
-  string path = 1;
+message Symlink {
+  string target = 1;
 }
-message WriteSymlinkReply {}
-
-message ReadSymlinkRequest {
-  string path = 1;
+message SymlinkId {
+  bytes symlink_id = 1;
 }
-message ReadSymlinkReply {}
 
 // Tree
 

@@ -128,6 +128,24 @@ impl BlockingBackendClient {
         rt.block_on(client.read_tree(request))
     }
 
+    pub fn write_symlink(
+        &self,
+        request: impl tonic::IntoRequest<Symlink>,
+    ) -> Result<tonic::Response<SymlinkId>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        let rt = self.rt.lock().unwrap();
+        rt.block_on(client.write_symlink(request))
+    }
+
+    pub fn read_symlink(
+        &self,
+        request: impl tonic::IntoRequest<SymlinkId>,
+    ) -> Result<tonic::Response<Symlink>, tonic::Status> {
+        let mut client = self.client.lock().unwrap();
+        let rt = self.rt.lock().unwrap();
+        rt.block_on(client.read_symlink(request))
+    }
+
     pub fn get_empty_tree_id(&self) -> Result<tonic::Response<TreeId>, tonic::Status> {
         let rt = self.rt.lock().unwrap();
         let mut client = self.client.lock().unwrap();

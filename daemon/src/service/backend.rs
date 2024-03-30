@@ -128,17 +128,25 @@ impl Backend for BackendService {
     #[tracing::instrument]
     async fn write_symlink(
         &self,
-        _request: Request<WriteSymlinkRequest>,
-    ) -> Result<Response<WriteSymlinkReply>, Status> {
-        todo!()
+        request: Request<Symlink>,
+    ) -> Result<Response<SymlinkId>, Status> {
+        let symlink = request.into_inner();
+        let symlink_id = *blake3::hash(&symlink.encode_to_vec()).as_bytes();
+        dbg!(&symlink_id);
+        let mut symlinks = self.store.symlinks.lock().unwrap();
+        symlinks.insert(symlink_id, symlink.into());
+        Ok(Response::new(SymlinkId {
+            symlink_id: symlink_id.to_vec(),
+        }))
     }
 
     #[tracing::instrument]
-    async fn read_symlink(
-        &self,
-        _request: Request<ReadSymlinkRequest>,
-    ) -> Result<Response<ReadSymlinkReply>, Status> {
-        todo!()
+    async fn read_symlink(&self, request: Request<SymlinkId>) -> Result<Response<Symlink>, Status> {
+        let symlink_id = request.into_inner();
+        println!("{:x?}", &symlink_id);
+        let symlinks = self.store.symlinks.lock().unwrap();
+        let symlink = symlinks.get(symlink_id.symlink_id.as_slice()).unwrap();
+        Ok(Response::new(symlink.as_proto()))
     }
 
     #[tracing::instrument]

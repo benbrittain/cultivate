@@ -114,12 +114,20 @@ impl Backend for CultivateBackend {
         Ok(FileId::new(id.file_id))
     }
 
-    async fn read_symlink(&self, _path: &RepoPath, _id: &SymlinkId) -> BackendResult<String> {
-        todo!("Support symlink")
+    async fn read_symlink(&self, _path: &RepoPath, id: &SymlinkId) -> BackendResult<String> {
+        let proto = self
+            .client
+            .read_symlink(symlink_id_to_proto(id))
+            .unwrap()
+            .into_inner();
+        Ok(symlink_from_proto(proto))
     }
 
-    fn write_symlink(&self, _path: &RepoPath, _target: &str) -> BackendResult<SymlinkId> {
-        todo!("Support symlink")
+    fn write_symlink(&self, _path: &RepoPath, target: &str) -> BackendResult<SymlinkId> {
+        let proto = symlink_to_proto(target);
+        let id = self.client.write_symlink(proto).unwrap();
+        let id = id.into_inner();
+        Ok(SymlinkId::new(id.symlink_id))
     }
 
     #[tracing::instrument]
@@ -204,6 +212,12 @@ pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::backend::CommitId {
 pub fn tree_id_to_proto(tree_id: &TreeId) -> proto::backend::TreeId {
     let mut proto = proto::backend::TreeId::default();
     proto.tree_id = tree_id.to_bytes();
+    proto
+}
+
+pub fn symlink_id_to_proto(symlink_id: &SymlinkId) -> proto::backend::SymlinkId {
+    let mut proto = proto::backend::SymlinkId::default();
+    proto.symlink_id = symlink_id.to_bytes();
     proto
 }
 
@@ -300,6 +314,16 @@ fn tree_to_proto(tree: &Tree) -> proto::backend::Tree {
         });
     }
     proto
+}
+
+fn symlink_to_proto(target: &str) -> proto::backend::Symlink {
+    let mut proto = proto::backend::Symlink::default();
+    proto.target = target.to_string();
+    proto
+}
+
+fn symlink_from_proto(proto: proto::backend::Symlink) -> String {
+    proto.target.to_string()
 }
 
 fn tree_value_to_proto(value: &TreeValue) -> proto::backend::TreeValue {

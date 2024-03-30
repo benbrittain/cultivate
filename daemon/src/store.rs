@@ -91,6 +91,26 @@ impl From<proto::backend::TreeValue> for TreeEntry {
 
 content_hash! {
 #[derive(Clone, Debug, Default)]
+pub struct Symlink {
+    // TODO maybe represent as PathBuf
+    pub target: String,
+}
+}
+
+impl Symlink {
+    pub fn get_hash(&self) -> Id {
+        *blake3(self).as_bytes()
+    }
+
+    pub fn as_proto(&self) -> proto::backend::Symlink {
+        let mut proto = proto::backend::Symlink::default();
+        proto.target = self.target.clone();
+        proto
+    }
+}
+
+content_hash! {
+#[derive(Clone, Debug, Default)]
 pub struct File {
     pub content: Vec<u8>,
 }
@@ -105,6 +125,14 @@ impl File {
         let mut proto = proto::backend::File::default();
         proto.data = self.content.clone();
         proto
+    }
+}
+
+impl From<proto::backend::Symlink> for Symlink {
+    fn from(proto: proto::backend::Symlink) -> Self {
+        let mut symlink = Symlink::default();
+        symlink.target = proto.target;
+        symlink
     }
 }
 
@@ -137,6 +165,9 @@ pub struct Store {
     /// File contents
     pub files: Arc<Mutex<HashMap<Id, File>>>,
 
+    /// File contents
+    pub symlinks: Arc<Mutex<HashMap<Id, Symlink>>>,
+
     /// Empty sha identity
     pub empty_tree_id: Id,
 
@@ -147,6 +178,7 @@ impl Store {
     pub fn new() -> Self {
         let commits = Arc::new(Mutex::new(HashMap::new()));
         let files = Arc::new(Mutex::new(HashMap::new()));
+        let symlinks = Arc::new(Mutex::new(HashMap::new()));
         let (empty_tree_id, trees) = {
             let mut trees = HashMap::new();
             let tree = Tree::default();
@@ -159,6 +191,7 @@ impl Store {
             commits,
             trees,
             files,
+            symlinks,
             empty_tree_id,
         }
     }
@@ -190,6 +223,19 @@ impl Store {
         let mut file_store = self.files.lock().unwrap();
         let hash = file.get_hash();
         file_store.insert(hash, file);
+        hash
+    }
+
+    pub fn get_symlink(&self, id: Id) -> Option<Symlink> {
+        let symlink_store = self.symlinks.lock().unwrap();
+        symlink_store.get(&id).cloned()
+    }
+
+    #[tracing::instrument]
+    pub async fn write_symlink(&self, symlink: Symlink) -> Id {
+        let mut symlink_store = self.symlinks.lock().unwrap();
+        let hash = symlink.get_hash();
+        symlink_store.insert(hash, symlink);
         hash
     }
 }

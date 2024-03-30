@@ -59,7 +59,26 @@ impl RepoManager {
         );
         // TODO Remove this! The mountpoint needs to be in the intended
         // working directory someday.
-        //        let mountpoint = Path::new("/tmp/cultivate");
+        // let mountpoint = Path::new("/tmp/cultivate");
+
+        //let file_id = store
+        //    .write_file(File {
+        //        content: b"hello\n".to_vec(),
+        //    })
+        //    .await;
+        //let tree_id = store
+        //    .write_tree(Tree {
+        //        entries: vec![(
+        //            "test_file".to_string(),
+        //            TreeEntry::File {
+        //                id: file_id,
+        //                executable: false,
+        //            },
+        //        )],
+        //    })
+        //    .await;
+        //ms.set_root_tree(&store, tree_id);
+
         let session = fuser::Session::new(
             crate::fs::CultivateFS::new(self.store.clone(), mount_store),
             &mountpoint,
