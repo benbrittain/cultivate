@@ -10,7 +10,7 @@ use std::{
 
 use fuser::{
     Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
-    ReplyOpen, ReplyWrite, Request, TimeOrNow, FUSE_ROOT_ID,
+    ReplyOpen, ReplyStatfs, ReplyWrite, Request, TimeOrNow, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
@@ -126,9 +126,8 @@ impl CultivateFS {
 
 impl Filesystem for CultivateFS {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
-        info!("Lookup {name:?} parent={parent}");
         // TODO define actual length
-        if name.len() > 40 as usize {
+        if name.len() > 140 as usize {
             reply.error(libc::ENAMETOOLONG);
             return;
         }
@@ -167,9 +166,9 @@ impl Filesystem for CultivateFS {
         todo!();
     }
 
-    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        warn!("statfs() implementation is a stub");
-    }
+    //fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    //    warn!("statfs() implementation is a stub");
+    //}
 
     fn access(&mut self, req: &Request, inode: u64, mask: i32, reply: ReplyEmpty) {
         info!("access() called with {:?} {:?}", inode, mask);
@@ -185,7 +184,6 @@ impl Filesystem for CultivateFS {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        info!("readdir() called with {:?}", inode);
         assert!(offset >= 0);
         let entries = match self.get_directory_content(inode) {
             Ok(entries) => entries,
@@ -194,6 +192,7 @@ impl Filesystem for CultivateFS {
                 return;
             }
         };
+        info!("readdir() called with {:?} {entries:?}", inode);
 
         // Fill the reply buffer as much as possible based upon the entries
         for (index, entry) in entries.iter().skip(offset as usize).enumerate() {
@@ -215,7 +214,7 @@ impl Filesystem for CultivateFS {
     }
 
     fn opendir(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
-        error!("opendir() called on {:?}", inode);
+        info!("opendir() called on {:?}", inode);
         let (access_mask, read, write) = match flags & libc::O_ACCMODE {
             libc::O_RDONLY => {
                 // Behavior is undefined, but most filesystems return EACCES
@@ -287,7 +286,6 @@ impl Filesystem for CultivateFS {
 
         match self.get_inode(inode) {
             Ok(mut attr) => {
-                info!("Requested inode: {:#?}", attr.clone());
                 if check_access(
                     attr.get_uid(),
                     attr.get_gid(),
@@ -338,7 +336,7 @@ impl Filesystem for CultivateFS {
                 return;
             }
         };
-        error!("Setattr not implemented");
+        warn!("Setattr not implemented");
         let attrs = self.get_inode(inode).unwrap();
         reply.attr(&Duration::new(0, 0), &attrs.into());
     }
@@ -473,10 +471,8 @@ impl Filesystem for CultivateFS {
             files.insert(hash, file);
             // there is no GC mechanism right now
             attrs.set_hash(hash);
-            info!("Updated inode={inode} to {attrs:?}");
 
             self.mount_store.set_inode(attrs.clone());
-            warn!("modified attributes: {:#?}", attrs.clone());
             reply.written(data.len() as u32);
         } else {
             reply.error(libc::EBADF);
@@ -574,6 +570,82 @@ impl Filesystem for CultivateFS {
     //    todo!()
     //}
 
+    fn mkdir(
+        &mut self,
+        req: &Request,
+        parent: u64,
+        name: &OsStr,
+        mut mode: u32,
+        _umask: u32,
+        reply: ReplyEntry,
+    ) {
+        info!("mkdir() called with {:?} {:?} {:o}", parent, name, mode);
+        if self.lookup_name(parent, name).is_ok() {
+            reply.error(libc::EEXIST);
+            return;
+        }
+
+        let mut parent_attrs = match self.get_inode(parent) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        if !check_access(
+            parent_attrs.get_uid(),
+            parent_attrs.get_gid(),
+            parent_attrs.get_mode(),
+            req.uid(),
+            req.gid(),
+            libc::W_OK,
+        ) {
+            reply.error(libc::EACCES);
+            return;
+        }
+        parent_attrs.update_last_modified();
+        parent_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(parent_attrs.clone());
+
+        if req.uid() != 0 {
+            mode &= !(libc::S_ISUID | libc::S_ISGID) as u32;
+        }
+        if parent_attrs.get_mode() & libc::S_ISGID as u16 != 0 {
+            mode |= libc::S_ISGID as u32;
+        }
+
+        let mut attrs = self.mount_store.create_new_node(FileKind::Directory);
+        // should this go in create new node? requires the Request
+        attrs.set_uid(req.uid());
+        attrs.set_gid(creation_gid(&parent_attrs, req.gid()));
+        self.mount_store.set_inode(attrs.clone());
+
+        let mut entries = self.get_directory_content(parent).unwrap();
+        entries.insert(
+            name.as_bytes().to_vec(),
+            (attrs.get_inode(), attrs.get_kind()),
+        );
+        self.mount_store.set_directory_content(parent, entries);
+
+        // create current dir
+        let mut entries = std::collections::BTreeMap::new();
+        entries.insert(b".".to_vec(), (attrs.get_inode(), FileKind::Directory));
+        entries.insert(b"..".to_vec(), (parent, FileKind::Directory));
+        self.mount_store
+            .set_directory_content(attrs.get_inode(), entries);
+
+        // update parent dir
+        let mut entries = self.get_directory_content(parent).unwrap();
+        entries.insert(
+            name.as_bytes().to_vec(),
+            (attrs.get_inode(), FileKind::Directory),
+        );
+        self.mount_store.set_directory_content(parent, entries);
+
+        reply.entry(&Duration::new(0, 0), &attrs.into(), 0);
+    }
+
     fn mknod(
         &mut self,
         req: &Request,
@@ -632,6 +704,7 @@ impl Filesystem for CultivateFS {
         );
         self.mount_store.set_directory_content(parent, entries);
 
+        assert!(as_file_kind(mode) != FileKind::Directory);
         //if as_file_kind(mode) == FileKind::Directory {
         //    let mut entries = BTreeMap::new();
         //    entries.insert(b".".to_vec(), (inode, FileKind::Directory));

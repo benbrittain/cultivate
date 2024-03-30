@@ -29,6 +29,10 @@ impl ContentHash for TreeEntry {
                 state.update(&[b'1']);
                 ContentHash::update(tree_id.as_slice(), state);
             }
+            TreeEntry::SymlinkId(symlink_id) => {
+                state.update(&[b'2']);
+                ContentHash::update(symlink_id.as_slice(), state);
+            }
             _ => todo!(),
         }
     }
@@ -165,7 +169,7 @@ pub struct Store {
     /// File contents
     pub files: Arc<Mutex<HashMap<Id, File>>>,
 
-    /// File contents
+    /// Symlinks
     pub symlinks: Arc<Mutex<HashMap<Id, Symlink>>>,
 
     /// Empty sha identity
@@ -179,6 +183,7 @@ impl Store {
         let commits = Arc::new(Mutex::new(HashMap::new()));
         let files = Arc::new(Mutex::new(HashMap::new()));
         let symlinks = Arc::new(Mutex::new(HashMap::new()));
+
         let (empty_tree_id, trees) = {
             let mut trees = HashMap::new();
             let tree = Tree::default();

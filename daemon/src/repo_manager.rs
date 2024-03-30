@@ -32,13 +32,15 @@ impl RepoManager {
     }
 
     /// Initialize a new repository.
-    pub fn initialize_repo(&self, mountpoint: &Path) {
+    // FIXME: cannot be async right now, will get a deadlock.
+    pub fn initialize_repo(&self, mountpoint: &Path) -> MountStore {
         let mount_store = MountStore::new(self.store.clone());
         let mut mounts = self.mounts.lock().unwrap();
         assert!(
             mounts.get(mountpoint.to_str().unwrap()).is_none(),
             "A repo may only be initialized once currently"
         );
+
         mounts.insert(
             mountpoint.to_str().unwrap().to_string(),
             mount_store.clone(),
@@ -61,26 +63,8 @@ impl RepoManager {
         // working directory someday.
         // let mountpoint = Path::new("/tmp/cultivate");
 
-        //let file_id = store
-        //    .write_file(File {
-        //        content: b"hello\n".to_vec(),
-        //    })
-        //    .await;
-        //let tree_id = store
-        //    .write_tree(Tree {
-        //        entries: vec![(
-        //            "test_file".to_string(),
-        //            TreeEntry::File {
-        //                id: file_id,
-        //                executable: false,
-        //            },
-        //        )],
-        //    })
-        //    .await;
-        //ms.set_root_tree(&store, tree_id);
-
         let session = fuser::Session::new(
-            crate::fs::CultivateFS::new(self.store.clone(), mount_store),
+            crate::fs::CultivateFS::new(self.store.clone(), mount_store.clone()),
             &mountpoint,
             &options,
         )
@@ -90,6 +74,7 @@ impl RepoManager {
         let bg = session.spawn().unwrap();
         let mut fuse_sessions = self.fuse_sessions.lock().unwrap();
         fuse_sessions.push(bg);
+        mount_store
     }
 
     pub fn deinit_repo(&self, _mountpoint: &Path) {

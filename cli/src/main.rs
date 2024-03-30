@@ -62,12 +62,25 @@ fn run_cultivate_command(
         CultivateCommands::Status => todo!(),
         CultivateCommands::Init => {
             let wc_path = command_helper.cwd();
+
+            // NOTE: We need to tell the daemon to mount the filesystem BEFORE we
+            // initalize the core jj internals or we'll have writes on-disk and on
+            // vfs.
+            let client =
+                crate::blocking_client::BlockingBackendClient::connect("http://[::1]:10000")
+                    .unwrap();
+            client
+                .initialize(proto::backend::InitializeReq {
+                    path: wc_path.as_os_str().to_str().unwrap().to_string(),
+                })
+                .unwrap();
+
+            assert!(std::env::set_current_dir(wc_path).is_ok());
             Workspace::init_with_factories(
                 command_helper.settings(),
                 wc_path,
                 &|settings, store_path| {
                     let mut backend = CultivateBackend::new(settings, store_path)?;
-                    backend.init(wc_path);
                     Ok(Box::new(backend))
                 },
                 Signer::from_settings(command_helper.settings())
@@ -79,6 +92,7 @@ fn run_cultivate_command(
                 &CultivateWorkingCopyFactory {},
                 WorkspaceId::default(),
             )?;
+            assert!(std::env::set_current_dir(&wc_path).is_ok());
             Ok(())
         }
     }

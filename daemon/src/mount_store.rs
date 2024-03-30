@@ -4,7 +4,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use tracing::info;
+use tracing::{error, info, instrument};
 
 use crate::store::{Id, Store, TreeEntry};
 
@@ -90,6 +90,16 @@ impl MountStore {
         self.set_inode(attrs);
     }
 
+    pub fn insert_symlink(&self, store: &Store, hash: Id, inode: Inode) {
+        let file = store
+            .get_symlink(hash)
+            .expect("HashId must refer to a known symlink");
+        let size = file.target.len();
+        let mut attrs = InodeAttributes::new(inode, FileKind::Symlink, size as u64);
+        attrs.hash = Some(hash);
+        self.set_inode(attrs);
+    }
+
     pub fn insert_tree(&self, store: &Store, hash: Id, inode: Inode) {
         let tree = store
             .get_tree(hash)
@@ -112,6 +122,10 @@ impl MountStore {
                 TreeEntry::TreeId(id) => {
                     self.insert_tree(store, id, new_inode);
                     entries.insert(entry_name.into_bytes(), (new_inode, FileKind::Directory));
+                }
+                TreeEntry::SymlinkId(id) => {
+                    self.insert_symlink(store, id, new_inode);
+                    entries.insert(entry_name.into_bytes(), (new_inode, FileKind::Symlink));
                 }
                 _ => todo!(),
             }
@@ -181,6 +195,10 @@ impl InodeAttributes {
 
     pub fn dec_file_handle(&mut self) {
         let prior = self.open_file_handles;
+        if self.open_file_handles == 0 {
+            error!("Tried to decrement open file handles beneath 0");
+            return;
+        }
         self.open_file_handles -= 1;
         info!(
             "{} open file handles: {}->{}",

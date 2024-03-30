@@ -53,15 +53,6 @@ impl CultivateBackend {
             empty_tree_id,
         })
     }
-
-    pub fn init(&mut self, working_copy_path: &Path) {
-        info!("Working copy path: {working_copy_path:?}");
-        self.client
-            .initialize(proto::backend::InitializeReq {
-                path: working_copy_path.as_os_str().to_str().unwrap().to_string(),
-            })
-            .unwrap();
-    }
 }
 
 #[async_trait]

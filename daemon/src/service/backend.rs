@@ -19,19 +19,22 @@ impl BackendService {
 
 #[tonic::async_trait]
 impl Backend for BackendService {
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn initialize(
         &self,
         request: Request<InitializeReq>,
     ) -> Result<Response<InitializeReply>, Status> {
         let req = request.into_inner();
         info!("Initializing a new repo at {}", req.path);
-        self.repo_mgr
+        let mount = self
+            .repo_mgr
             .initialize_repo(&std::path::PathBuf::from(req.path));
+        info!("running...");
 
         Ok(Response::new(InitializeReply {}))
     }
-    #[tracing::instrument]
+
+    #[tracing::instrument(skip(self))]
     async fn get_tree_state(
         &self,
         request: Request<GetTreeStateReq>,
@@ -44,7 +47,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_checkout_state(
         &self,
         request: Request<GetCheckoutStateReq>,
@@ -73,13 +76,14 @@ impl Backend for BackendService {
         Ok(Response::new(SetCheckoutStateReply {}))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn snapshot(
         &self,
         request: Request<SnapshotReq>,
     ) -> Result<Response<SnapshotReply>, Status> {
         let req = request.into_inner();
         let mount = self.repo_mgr.get(&req.working_copy_path).unwrap();
+        panic!("snapshot!");
         //        mount.snapshot().unwrap();
         let tree_id = mount.get_tree_id();
         Ok(Response::new(SnapshotReply {
@@ -87,7 +91,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn get_empty_tree_id(
         &self,
         _request: Request<GetEmptyTreeIdReq>,
@@ -96,7 +100,7 @@ impl Backend for BackendService {
         Ok(Response::new(TreeId { tree_id }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn concurrency(
         &self,
         _request: Request<ConcurrencyRequest>,
@@ -104,7 +108,7 @@ impl Backend for BackendService {
         todo!()
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn write_file(&self, request: Request<File>) -> Result<Response<FileId>, Status> {
         let file = request.into_inner();
         let file_id = *blake3::hash(&file.encode_to_vec()).as_bytes();
@@ -116,7 +120,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn read_file(&self, request: Request<FileId>) -> Result<Response<File>, Status> {
         let file_id = request.into_inner();
         println!("{:x?}", &file_id);
@@ -125,7 +129,7 @@ impl Backend for BackendService {
         Ok(Response::new(file.as_proto()))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn write_symlink(
         &self,
         request: Request<Symlink>,
@@ -140,7 +144,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn read_symlink(&self, request: Request<SymlinkId>) -> Result<Response<Symlink>, Status> {
         let symlink_id = request.into_inner();
         println!("{:x?}", &symlink_id);
@@ -149,7 +153,7 @@ impl Backend for BackendService {
         Ok(Response::new(symlink.as_proto()))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn write_tree(&self, request: Request<Tree>) -> Result<Response<TreeId>, Status> {
         let tree: crate::store::Tree = request.into_inner().into();
         let tree_id = self.store.write_tree(tree).await;
@@ -159,7 +163,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn read_tree(&self, request: Request<TreeId>) -> Result<Response<Tree>, Status> {
         let tree_id = request.into_inner();
         println!("{:x?}", &tree_id);
@@ -170,7 +174,7 @@ impl Backend for BackendService {
         Ok(Response::new(tree.as_proto()))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn write_commit(&self, request: Request<Commit>) -> Result<Response<CommitId>, Status> {
         let commit = request.into_inner();
 
@@ -186,7 +190,7 @@ impl Backend for BackendService {
         }))
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn read_commit(&self, request: Request<CommitId>) -> Result<Response<Commit>, Status> {
         let commit_id = request.into_inner();
         let commits = self.store.commits.lock().unwrap();

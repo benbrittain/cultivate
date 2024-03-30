@@ -39,7 +39,6 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
         Ok(Box::new(CultivateWorkingCopy::init(
             store,
             working_copy_path,
-            //state_path,
             operation_id,
             workspace_id,
         )?))
@@ -51,11 +50,7 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
         working_copy_path: PathBuf,
         _state_path: PathBuf,
     ) -> Box<dyn WorkingCopy> {
-        Box::new(CultivateWorkingCopy::load(
-            store,
-            working_copy_path,
-            //state_path,
-        ))
+        Box::new(CultivateWorkingCopy::load(store, working_copy_path))
     }
 }
 
@@ -236,6 +231,7 @@ impl WorkingCopy for CultivateWorkingCopy {
         };
         let old_operation_id = wc.operation_id().clone();
         let old_tree_id = wc.tree_id()?.clone();
+        todo!();
         Ok(Box::new(LockedCultivateWorkingCopy {
             wc,
             lock,
@@ -271,8 +267,9 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
     }
 
     fn snapshot(&mut self, options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
-        let tree_state = self.wc.snapshot(options);
-        Ok(tree_state.tree_id)
+        todo!();
+        //let tree_state = self.wc.snapshot(options);
+        //Ok(tree_state.tree_id)
     }
 
     fn check_out(&mut self, commit: &Commit) -> Result<CheckoutStats, CheckoutError> {
