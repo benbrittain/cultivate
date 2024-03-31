@@ -15,6 +15,7 @@ mod blocking_client;
 mod working_copy;
 
 use backend::CultivateBackend;
+use jj_lib::{local_working_copy::LocalWorkingCopyFactory, working_copy::WorkingCopyFactory};
 use working_copy::{CultivateWorkingCopy, CultivateWorkingCopyFactory};
 
 #[derive(Debug, Clone, clap::Subcommand)]
@@ -50,6 +51,10 @@ fn create_store_factories() -> StoreFactories {
         }),
     );
     store_factories
+}
+
+pub fn default_working_copy_factory() -> Box<dyn WorkingCopyFactory> {
+    Box::new(LocalWorkingCopyFactory {})
 }
 
 fn run_cultivate_command(
@@ -90,6 +95,7 @@ fn run_cultivate_command(
                 ReadonlyRepo::default_index_store_initializer(),
                 ReadonlyRepo::default_submodule_store_initializer(),
                 &CultivateWorkingCopyFactory {},
+                //&*default_working_copy_factory(),
                 WorkspaceId::default(),
             )?;
             assert!(std::env::set_current_dir(&wc_path).is_ok());

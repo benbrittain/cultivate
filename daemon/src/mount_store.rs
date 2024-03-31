@@ -193,6 +193,10 @@ impl InodeAttributes {
         );
     }
 
+    pub fn dec_hardlink_count(&mut self) {
+        self.hardlinks -= 1;
+    }
+
     pub fn dec_file_handle(&mut self) {
         let prior = self.open_file_handles;
         if self.open_file_handles == 0 {

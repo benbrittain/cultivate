@@ -231,7 +231,6 @@ impl WorkingCopy for CultivateWorkingCopy {
         };
         let old_operation_id = wc.operation_id().clone();
         let old_tree_id = wc.tree_id()?.clone();
-        todo!();
         Ok(Box::new(LockedCultivateWorkingCopy {
             wc,
             lock,
@@ -266,10 +265,13 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
         &self.old_tree_id
     }
 
+    fn recover(&mut self, commit: &Commit) -> Result<(), ResetError> {
+        todo!()
+    }
+
     fn snapshot(&mut self, options: SnapshotOptions) -> Result<MergedTreeId, SnapshotError> {
-        todo!();
-        //let tree_state = self.wc.snapshot(options);
-        //Ok(tree_state.tree_id)
+        let tree_state = self.wc.snapshot(options);
+        Ok(tree_state.tree_id)
     }
 
     fn check_out(&mut self, commit: &Commit) -> Result<CheckoutStats, CheckoutError> {
@@ -278,10 +280,6 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
     }
 
     fn reset(&mut self, _commit: &Commit) -> Result<(), ResetError> {
-        todo!()
-    }
-
-    fn reset_to_empty(&mut self) -> Result<(), ResetError> {
         todo!()
     }
 

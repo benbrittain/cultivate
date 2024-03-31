@@ -176,6 +176,177 @@ impl Filesystem for CultivateFS {
         reply.ok();
     }
 
+    fn rmdir(&mut self, req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+        error!("rmdir() called with {:?} {:?}", parent, name);
+        panic!();
+    }
+
+    fn rename(
+        &mut self,
+        req: &Request,
+        parent: u64,
+        name: &OsStr,
+        new_parent: u64,
+        new_name: &OsStr,
+        flags: u32,
+        reply: ReplyEmpty,
+    ) {
+        let mut inode_attrs = match self.lookup_name(parent, name) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        let mut parent_attrs = match self.get_inode(parent) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        if !check_access(
+            parent_attrs.get_uid(),
+            parent_attrs.get_gid(),
+            parent_attrs.get_mode(),
+            req.uid(),
+            req.gid(),
+            libc::W_OK,
+        ) {
+            reply.error(libc::EACCES);
+            return;
+        }
+
+        // "Sticky bit" handling
+        // if parent_attrs.mode & libc::S_ISVTX as u16 != 0
+        //     && req.uid() != 0
+        //     && req.uid() != parent_attrs.uid
+        //     && req.uid() != inode_attrs.uid
+        // {
+        //     reply.error(libc::EACCES);
+        //     return;
+        // }
+
+        let mut new_parent_attrs = match self.get_inode(new_parent) {
+            Ok(attrs) => attrs,
+            Err(error_code) => {
+                reply.error(error_code);
+                return;
+            }
+        };
+
+        if !check_access(
+            new_parent_attrs.get_uid(),
+            new_parent_attrs.get_gid(),
+            new_parent_attrs.get_mode(),
+            req.uid(),
+            req.gid(),
+            libc::W_OK,
+        ) {
+            reply.error(libc::EACCES);
+            return;
+        }
+
+        // // "Sticky bit" handling in new_parent
+        // if new_parent_attrs.mode & libc::S_ISVTX as u16 != 0 {
+        //     if let Ok(existing_attrs) = self.lookup_name(new_parent, new_name) {
+        //         if req.uid() != 0
+        //             && req.uid() != new_parent_attrs.uid
+        //             && req.uid() != existing_attrs.uid
+        //         {
+        //             reply.error(libc::EACCES);
+        //             return;
+        //         }
+        //     }
+        // }
+
+        #[cfg(target_os = "linux")]
+        if flags & libc::RENAME_EXCHANGE as u32 != 0 {
+            todo!();
+        }
+
+        // Only overwrite an existing directory if it's empty
+        if let Ok(new_name_attrs) = self.lookup_name(new_parent, new_name) {
+            if new_name_attrs.get_kind() == FileKind::Directory
+                && self
+                    .get_directory_content(new_name_attrs.get_inode())
+                    .unwrap()
+                    .len()
+                    > 2
+            {
+                reply.error(libc::ENOTEMPTY);
+                return;
+            }
+        }
+
+        // Only move an existing directory to a new parent, if we have write access to it,
+        // because that will change the ".." link in it
+        if inode_attrs.get_kind() == FileKind::Directory
+            && parent != new_parent
+            && !check_access(
+                inode_attrs.get_uid(),
+                inode_attrs.get_gid(),
+                inode_attrs.get_mode(),
+                req.uid(),
+                req.gid(),
+                libc::W_OK,
+            )
+        {
+            reply.error(libc::EACCES);
+            return;
+        }
+
+        // If target already exists decrement its hardlink count
+        if let Ok(mut existing_inode_attrs) = self.lookup_name(new_parent, new_name) {
+            let mut entries = self.get_directory_content(new_parent).unwrap();
+            entries.remove(new_name.as_bytes());
+            self.mount_store.set_directory_content(new_parent, entries);
+
+            if existing_inode_attrs.get_kind() == FileKind::Directory {
+                todo!();
+                //existing_inode_attrs.hardlinks = 0;
+            } else {
+                existing_inode_attrs.dec_hardlink_count();
+            }
+            existing_inode_attrs.update_last_metadata_changed();
+            self.mount_store.set_inode(existing_inode_attrs);
+            warn!("not GCing Inode! FIX THIS!");
+            //self.gc_inode(&existing_inode_attrs);
+        }
+
+        let mut entries = self.get_directory_content(parent).unwrap();
+        entries.remove(name.as_bytes());
+        self.mount_store.set_directory_content(parent, entries);
+
+        let mut entries = self.get_directory_content(new_parent).unwrap();
+        entries.insert(
+            new_name.as_bytes().to_vec(),
+            (inode_attrs.get_inode(), inode_attrs.get_kind()),
+        );
+        self.mount_store.set_directory_content(new_parent, entries);
+
+        parent_attrs.update_last_modified();
+        parent_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(parent_attrs);
+        new_parent_attrs.update_last_metadata_changed();
+        new_parent_attrs.update_last_modified();
+        self.mount_store.set_inode(new_parent_attrs);
+        inode_attrs.update_last_metadata_changed();
+        self.mount_store.set_inode(inode_attrs.clone());
+
+        // change the .. to the new parent
+        if inode_attrs.get_kind() == FileKind::Directory {
+            let mut entries = self.get_directory_content(inode_attrs.get_inode()).unwrap();
+            entries.insert(b"..".to_vec(), (new_parent, FileKind::Directory));
+            self.mount_store
+                .set_directory_content(inode_attrs.get_inode(), entries);
+        }
+
+        reply.ok();
+    }
+
     fn readdir(
         &mut self,
         _req: &Request,
