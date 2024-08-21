@@ -7,7 +7,7 @@ use jj_lib::{
     op_store::WorkspaceId,
     repo::{ReadonlyRepo, StoreFactories},
     signing::Signer,
-    workspace::{default_working_copy_factories, Workspace, WorkspaceInitError},
+    workspace::{WorkingCopyFactories, Workspace, WorkspaceInitError},
 };
 
 mod backend;
@@ -39,7 +39,7 @@ enum CultivateSubcommand {
 }
 
 fn create_store_factories() -> StoreFactories {
-    let mut store_factories = StoreFactories::default();
+    let mut store_factories = StoreFactories::empty();
     // Register the backend so it can be loaded when the repo is loaded. The name
     // must match `Backend::name()`.
     store_factories.add_backend(
@@ -95,7 +95,7 @@ fn run_cultivate_command(
                 ReadonlyRepo::default_index_store_initializer(),
                 ReadonlyRepo::default_submodule_store_initializer(),
                 &CultivateWorkingCopyFactory {},
-                //&*default_working_copy_factory(),
+                // &*default_working_copy_factory(),
                 WorkspaceId::default(),
             )?;
             assert!(std::env::set_current_dir(&wc_path).is_ok());
@@ -105,7 +105,7 @@ fn run_cultivate_command(
 }
 
 fn main() -> std::process::ExitCode {
-    let mut working_copy_factories = default_working_copy_factories();
+    let mut working_copy_factories = WorkingCopyFactories::new();
     working_copy_factories.insert(
         CultivateWorkingCopy::name().to_owned(),
         Box::new(CultivateWorkingCopyFactory {}),

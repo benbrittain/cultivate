@@ -1,5 +1,5 @@
 [workspace]
-members = ["daemon", "proto", "cli"]
+members = ["daemon2", "proto", "cli"]
 resolver = "2"
 
 [workspace.package]
@@ -21,3 +21,4 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1.14"
 tracing = "0.1"
 zstd = "0.13.0"
+nfsserve = "0.10"

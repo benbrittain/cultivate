@@ -18,9 +18,7 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use proto::backend::{
-    GetCheckoutStateReq, GetTreeStateReq, SnapshotReq,
-};
+use proto::backend::{GetCheckoutStateReq, GetTreeStateReq, SnapshotReq};
 use tracing::{info, warn};
 
 use crate::blocking_client::BlockingBackendClient;
