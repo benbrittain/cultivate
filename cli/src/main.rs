@@ -85,7 +85,7 @@ fn run_cultivate_command(
                 command_helper.settings(),
                 wc_path,
                 &|settings, store_path| {
-                    let mut backend = CultivateBackend::new(settings, store_path)?;
+                    let backend = CultivateBackend::new(settings, store_path)?;
                     Ok(Box::new(backend))
                 },
                 Signer::from_settings(command_helper.settings())
@@ -113,8 +113,8 @@ fn main() -> std::process::ExitCode {
     // NOTE: logging before this point will not work since it is
     // initialized by CliRunner.
     CliRunner::init()
-        .set_store_factories(create_store_factories())
-        .set_working_copy_factories(working_copy_factories)
+        .add_store_factories(create_store_factories())
+        .add_working_copy_factories(working_copy_factories)
         .add_subcommand(run_cultivate_command)
         .run()
 }

@@ -4,7 +4,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use tracing::{error, info, instrument};
+use tracing::{error, info};
 
 use crate::store::{Id, Store, TreeEntry};
 

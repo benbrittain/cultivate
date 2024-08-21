@@ -10,7 +10,7 @@ use std::{
 
 use fuser::{
     Filesystem, KernelConfig, ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
-    ReplyOpen, ReplyStatfs, ReplyWrite, Request, TimeOrNow, FUSE_ROOT_ID,
+    ReplyOpen, ReplyWrite, Request, TimeOrNow, FUSE_ROOT_ID,
 };
 use tracing::{error, info, warn};
 
@@ -500,7 +500,7 @@ impl Filesystem for CultivateFS {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let mut attrs = match self.get_inode(inode) {
+        let attrs = match self.get_inode(inode) {
             Ok(attrs) => attrs,
             Err(error_code) => {
                 reply.error(error_code);
@@ -1192,7 +1192,7 @@ mod tests {
     #[tokio::test]
     #[traced_test]
     async fn write_symlink() {
-        setup_mount(|mut mount_path, store, mount_store| async move {
+        setup_mount(|mount_path, store, mount_store| async move {
             // Empty tree
             let tree_id = store.write_tree(Tree { entries: vec![] }).await;
             mount_store.set_root_tree(&store, tree_id);

@@ -19,9 +19,9 @@ use jj_lib::{
     },
 };
 use proto::backend::{
-    GetCheckoutStateReq, GetTreeStateReply, GetTreeStateReq, SnapshotReply, SnapshotReq,
+    GetCheckoutStateReq, GetTreeStateReq, SnapshotReq,
 };
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::blocking_client::BlockingBackendClient;
 
@@ -49,8 +49,11 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
         store: Arc<Store>,
         working_copy_path: PathBuf,
         _state_path: PathBuf,
-    ) -> Box<dyn WorkingCopy> {
-        Box::new(CultivateWorkingCopy::load(store, working_copy_path))
+    ) -> Result<Box<dyn WorkingCopy + 'static>, WorkingCopyStateError> {
+        Ok(Box::new(CultivateWorkingCopy::load(
+            store,
+            working_copy_path,
+        )))
     }
 }
 
@@ -265,7 +268,7 @@ impl LockedWorkingCopy for LockedCultivateWorkingCopy {
         &self.old_tree_id
     }
 
-    fn recover(&mut self, commit: &Commit) -> Result<(), ResetError> {
+    fn recover(&mut self, _commit: &Commit) -> Result<(), ResetError> {
         todo!()
     }
 

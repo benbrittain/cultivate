@@ -6,20 +6,20 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::stream::BoxStream;
 use jj_lib::{
     backend::{
         make_root_commit, Backend, BackendError, BackendInitError, BackendResult, ChangeId, Commit,
-        CommitId, Conflict, ConflictId, FileId, MergedTreeId, MillisSinceEpoch, SecureSig,
-        Signature, SigningFn, SymlinkId, Timestamp, Tree, TreeId, TreeValue,
+        CommitId, Conflict, ConflictId, CopyRecord, FileId, MergedTreeId, MillisSinceEpoch,
+        SecureSig, Signature, SigningFn, SymlinkId, Timestamp, Tree, TreeId, TreeValue,
     },
     index::Index,
     merge::MergeBuilder,
     object_id::ObjectId,
-    repo_path::{RepoPath, RepoPathComponentBuf},
+    repo_path::{RepoPath, RepoPathBuf, RepoPathComponentBuf},
     settings::UserSettings,
 };
 use prost::Message;
-use tracing::info;
 
 use crate::blocking_client::BlockingBackendClient;
 
@@ -184,6 +184,15 @@ impl Backend for CultivateBackend {
     }
 
     fn gc(&self, _index: &dyn Index, _keep_newer: SystemTime) -> BackendResult<()> {
+        todo!()
+    }
+
+    fn get_copy_records(
+        &self,
+        paths: &[RepoPathBuf],
+        roots: &[CommitId],
+        heads: &[CommitId],
+    ) -> BackendResult<BoxStream<BackendResult<CopyRecord>>> {
         todo!()
     }
 }
