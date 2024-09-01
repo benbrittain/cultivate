@@ -1,19 +1,19 @@
 use prost::Message;
-use proto::backend::{backend_server::Backend, *};
+use proto::jj_interface::*;
 use tonic::{Request, Response, Status};
 use tracing::info;
 
 #[derive(Debug)]
-pub struct BackendService {}
+pub struct JujutsuService {}
 
-impl BackendService {
-    pub fn new() -> Self {
-        BackendService {}
+impl JujutsuService {
+    pub fn new() -> jujutsu_interface_server::JujutsuInterfaceServer<Self> {
+        jujutsu_interface_server::JujutsuInterfaceServer::new(JujutsuService {})
     }
 }
 
 #[tonic::async_trait]
-impl Backend for BackendService {
+impl jujutsu_interface_server::JujutsuInterface for JujutsuService {
     #[tracing::instrument(skip(self))]
     async fn initialize(
         &self,

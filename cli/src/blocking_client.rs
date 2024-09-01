@@ -1,29 +1,31 @@
 use std::sync::{Arc, Mutex};
 
-use proto::backend::{backend_client::BackendClient, *};
+use proto::jj_interface::{jujutsu_interface_client::JujutsuInterfaceClient, *};
 use tokio::runtime::{Builder, Runtime};
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;
 
 // The order of the fields in this struct is important. They must be ordered
-// such that when `BlockingBackendClient` is dropped the client is dropped
+// such that when `BlockingJujutsuInterfaceClient` is dropped the client is dropped
 // before the runtime. Not doing this will result in a deadlock when dropped.
 // Rust drops struct fields in declaration order.
 #[derive(Debug, Clone)]
-pub struct BlockingBackendClient {
-    client: Arc<Mutex<BackendClient<tonic::transport::Channel>>>,
+pub struct BlockingJujutsuInterfaceClient {
+    client: Arc<Mutex<JujutsuInterfaceClient<tonic::transport::Channel>>>,
     rt: Arc<Mutex<Runtime>>,
 }
 
-impl BlockingBackendClient {
+impl BlockingJujutsuInterfaceClient {
     pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
     where
         D: TryInto<tonic::transport::Endpoint>,
         D::Error: Into<StdError>,
     {
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
-        let client = Arc::new(Mutex::new(rt.block_on(BackendClient::connect(dst))?));
+        let client = Arc::new(Mutex::new(
+            rt.block_on(JujutsuInterfaceClient::connect(dst))?,
+        ));
         let rt = Arc::new(Mutex::new(rt));
 
         Ok(Self { client, rt })

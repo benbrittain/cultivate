@@ -71,11 +71,12 @@ fn run_cultivate_command(
             // NOTE: We need to tell the daemon to mount the filesystem BEFORE we
             // initalize the core jj internals or we'll have writes on-disk and on
             // vfs.
-            let client =
-                crate::blocking_client::BlockingBackendClient::connect("http://[::1]:10000")
-                    .unwrap();
+            let client = crate::blocking_client::BlockingJujutsuInterfaceClient::connect(
+                "http://[::1]:10000",
+            )
+            .unwrap();
             client
-                .initialize(proto::backend::InitializeReq {
+                .initialize(proto::jj_interface::InitializeReq {
                     path: wc_path.as_os_str().to_str().unwrap().to_string(),
                 })
                 .unwrap();

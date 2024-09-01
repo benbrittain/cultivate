@@ -21,14 +21,14 @@ use jj_lib::{
 };
 use prost::Message;
 
-use crate::blocking_client::BlockingBackendClient;
+use crate::blocking_client::BlockingJujutsuInterfaceClient;
 
 const COMMIT_ID_LENGTH: usize = 32;
 const CHANGE_ID_LENGTH: usize = 16;
 
 #[derive(Debug)]
 pub struct CultivateBackend {
-    client: BlockingBackendClient,
+    client: BlockingJujutsuInterfaceClient,
     root_commit_id: CommitId,
     root_change_id: ChangeId,
     empty_tree_id: TreeId,
@@ -42,7 +42,7 @@ impl CultivateBackend {
     pub fn new(_settings: &UserSettings, _store_path: &Path) -> Result<Self, BackendInitError> {
         let root_commit_id = CommitId::from_bytes(&[0; COMMIT_ID_LENGTH]);
         let root_change_id = ChangeId::from_bytes(&[0; CHANGE_ID_LENGTH]);
-        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+        let client = BlockingJujutsuInterfaceClient::connect("http://[::1]:10000").unwrap();
         let empty_tree_id =
             TreeId::from_bytes(&client.get_empty_tree_id().unwrap().into_inner().tree_id);
 
@@ -189,40 +189,40 @@ impl Backend for CultivateBackend {
 
     fn get_copy_records(
         &self,
-        paths: &[RepoPathBuf],
-        roots: &[CommitId],
-        heads: &[CommitId],
+        _paths: &[RepoPathBuf],
+        _roots: &[CommitId],
+        _heads: &[CommitId],
     ) -> BackendResult<BoxStream<BackendResult<CopyRecord>>> {
         todo!()
     }
 }
 
-pub fn file_id_to_proto(file_id: &FileId) -> proto::backend::FileId {
-    let mut proto = proto::backend::FileId::default();
+pub fn file_id_to_proto(file_id: &FileId) -> proto::jj_interface::FileId {
+    let mut proto = proto::jj_interface::FileId::default();
     proto.file_id = file_id.to_bytes();
     proto
 }
 
-pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::backend::CommitId {
-    let mut proto = proto::backend::CommitId::default();
+pub fn commit_id_to_proto(commit_id: &CommitId) -> proto::jj_interface::CommitId {
+    let mut proto = proto::jj_interface::CommitId::default();
     proto.commit_id = commit_id.to_bytes();
     proto
 }
 
-pub fn tree_id_to_proto(tree_id: &TreeId) -> proto::backend::TreeId {
-    let mut proto = proto::backend::TreeId::default();
+pub fn tree_id_to_proto(tree_id: &TreeId) -> proto::jj_interface::TreeId {
+    let mut proto = proto::jj_interface::TreeId::default();
     proto.tree_id = tree_id.to_bytes();
     proto
 }
 
-pub fn symlink_id_to_proto(symlink_id: &SymlinkId) -> proto::backend::SymlinkId {
-    let mut proto = proto::backend::SymlinkId::default();
+pub fn symlink_id_to_proto(symlink_id: &SymlinkId) -> proto::jj_interface::SymlinkId {
+    let mut proto = proto::jj_interface::SymlinkId::default();
     proto.symlink_id = symlink_id.to_bytes();
     proto
 }
 
-pub fn commit_to_proto(commit: &Commit) -> proto::backend::Commit {
-    let mut proto = proto::backend::Commit::default();
+pub fn commit_to_proto(commit: &Commit) -> proto::jj_interface::Commit {
+    let mut proto = proto::jj_interface::Commit::default();
     for parent in &commit.parents {
         proto.parents.push(parent.to_bytes());
     }
@@ -245,7 +245,7 @@ pub fn commit_to_proto(commit: &Commit) -> proto::backend::Commit {
     proto
 }
 
-fn commit_from_proto(mut proto: proto::backend::Commit) -> Commit {
+fn commit_from_proto(mut proto: proto::jj_interface::Commit) -> Commit {
     // Note how .take() sets the secure_sig field to None before we encode the data.
     // Needs to be done first since proto is partially moved a bunch below
     let secure_sig = proto.secure_sig.take().map(|sig| SecureSig {
@@ -274,18 +274,18 @@ fn commit_from_proto(mut proto: proto::backend::Commit) -> Commit {
         secure_sig,
     }
 }
-fn signature_to_proto(signature: &Signature) -> proto::backend::commit::Signature {
-    proto::backend::commit::Signature {
+fn signature_to_proto(signature: &Signature) -> proto::jj_interface::commit::Signature {
+    proto::jj_interface::commit::Signature {
         name: signature.name.clone(),
         email: signature.email.clone(),
-        timestamp: Some(proto::backend::commit::Timestamp {
+        timestamp: Some(proto::jj_interface::commit::Timestamp {
             millis_since_epoch: signature.timestamp.timestamp.0,
             tz_offset: signature.timestamp.tz_offset,
         }),
     }
 }
 
-fn signature_from_proto(proto: proto::backend::commit::Signature) -> Signature {
+fn signature_from_proto(proto: proto::jj_interface::commit::Signature) -> Signature {
     let timestamp = proto.timestamp.unwrap_or_default();
     Signature {
         name: proto.name,
@@ -297,18 +297,18 @@ fn signature_from_proto(proto: proto::backend::commit::Signature) -> Signature {
     }
 }
 
-fn file_to_proto(file: &mut dyn Read) -> proto::backend::File {
-    let mut proto = proto::backend::File::default();
+fn file_to_proto(file: &mut dyn Read) -> proto::jj_interface::File {
+    let mut proto = proto::jj_interface::File::default();
     let mut out = vec![];
     zstd::stream::copy_encode(file, &mut out, 0).unwrap();
     proto.data = out;
     proto
 }
 
-fn tree_to_proto(tree: &Tree) -> proto::backend::Tree {
-    let mut proto = proto::backend::Tree::default();
+fn tree_to_proto(tree: &Tree) -> proto::jj_interface::Tree {
+    let mut proto = proto::jj_interface::Tree::default();
     for entry in tree.entries() {
-        proto.entries.push(proto::backend::tree::Entry {
+        proto.entries.push(proto::jj_interface::tree::Entry {
             name: entry.name().as_str().to_owned(),
             value: Some(tree_value_to_proto(entry.value())),
         });
@@ -316,50 +316,56 @@ fn tree_to_proto(tree: &Tree) -> proto::backend::Tree {
     proto
 }
 
-fn symlink_to_proto(target: &str) -> proto::backend::Symlink {
-    let mut proto = proto::backend::Symlink::default();
+fn symlink_to_proto(target: &str) -> proto::jj_interface::Symlink {
+    let mut proto = proto::jj_interface::Symlink::default();
     proto.target = target.to_string();
     proto
 }
 
-fn symlink_from_proto(proto: proto::backend::Symlink) -> String {
+fn symlink_from_proto(proto: proto::jj_interface::Symlink) -> String {
     proto.target.to_string()
 }
 
-fn tree_value_to_proto(value: &TreeValue) -> proto::backend::TreeValue {
-    let mut proto = proto::backend::TreeValue::default();
+fn tree_value_to_proto(value: &TreeValue) -> proto::jj_interface::TreeValue {
+    let mut proto = proto::jj_interface::TreeValue::default();
     match value {
         TreeValue::File { id, executable } => {
-            proto.value = Some(proto::backend::tree_value::Value::File(
-                proto::backend::tree_value::File {
+            proto.value = Some(proto::jj_interface::tree_value::Value::File(
+                proto::jj_interface::tree_value::File {
                     id: id.to_bytes(),
                     executable: *executable,
                 },
             ));
         }
         TreeValue::Symlink(id) => {
-            proto.value = Some(proto::backend::tree_value::Value::SymlinkId(id.to_bytes()));
+            proto.value = Some(proto::jj_interface::tree_value::Value::SymlinkId(
+                id.to_bytes(),
+            ));
         }
         TreeValue::GitSubmodule(_id) => {
             panic!("cannot store git submodules");
         }
         TreeValue::Tree(id) => {
-            proto.value = Some(proto::backend::tree_value::Value::TreeId(id.to_bytes()));
+            proto.value = Some(proto::jj_interface::tree_value::Value::TreeId(
+                id.to_bytes(),
+            ));
         }
         TreeValue::Conflict(id) => {
-            proto.value = Some(proto::backend::tree_value::Value::ConflictId(id.to_bytes()));
+            proto.value = Some(proto::jj_interface::tree_value::Value::ConflictId(
+                id.to_bytes(),
+            ));
         }
     }
     proto
 }
 
-fn file_from_proto(proto: proto::backend::File) -> Box<dyn Read> {
+fn file_from_proto(proto: proto::jj_interface::File) -> Box<dyn Read> {
     let mut file = vec![];
     zstd::stream::copy_decode(proto.data.as_slice(), &mut file).unwrap();
     Box::new(Cursor::new(file))
 }
 
-fn tree_from_proto(proto: proto::backend::Tree) -> Tree {
+fn tree_from_proto(proto: proto::jj_interface::Tree) -> Tree {
     let mut tree = Tree::default();
     for proto_entry in proto.entries {
         let value = tree_value_from_proto(proto_entry.value.unwrap());
@@ -368,10 +374,10 @@ fn tree_from_proto(proto: proto::backend::Tree) -> Tree {
     tree
 }
 
-fn tree_value_from_proto(proto: proto::backend::TreeValue) -> TreeValue {
+fn tree_value_from_proto(proto: proto::jj_interface::TreeValue) -> TreeValue {
     match proto.value.unwrap() {
-        proto::backend::tree_value::Value::TreeId(id) => TreeValue::Tree(TreeId::new(id)),
-        proto::backend::tree_value::Value::File(proto::backend::tree_value::File {
+        proto::jj_interface::tree_value::Value::TreeId(id) => TreeValue::Tree(TreeId::new(id)),
+        proto::jj_interface::tree_value::Value::File(proto::jj_interface::tree_value::File {
             id,
             executable,
             ..
@@ -379,8 +385,10 @@ fn tree_value_from_proto(proto: proto::backend::TreeValue) -> TreeValue {
             id: FileId::new(id),
             executable,
         },
-        proto::backend::tree_value::Value::SymlinkId(id) => TreeValue::Symlink(SymlinkId::new(id)),
-        proto::backend::tree_value::Value::ConflictId(id) => {
+        proto::jj_interface::tree_value::Value::SymlinkId(id) => {
+            TreeValue::Symlink(SymlinkId::new(id))
+        }
+        proto::jj_interface::tree_value::Value::ConflictId(id) => {
             TreeValue::Conflict(ConflictId::new(id))
         }
     }

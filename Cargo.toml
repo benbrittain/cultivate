@@ -1,5 +1,5 @@
 [workspace]
-members = ["daemon2", "proto", "cli"]
+members = ["daemon", "proto", "cli"]
 resolver = "2"
 
 [workspace.package]

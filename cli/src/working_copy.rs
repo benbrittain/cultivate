@@ -18,10 +18,10 @@ use jj_lib::{
         SnapshotOptions, WorkingCopy, WorkingCopyFactory, WorkingCopyStateError,
     },
 };
-use proto::backend::{GetCheckoutStateReq, GetTreeStateReq, SnapshotReq};
+use proto::jj_interface::{GetCheckoutStateReq, GetTreeStateReq, SnapshotReq};
 use tracing::{info, warn};
 
-use crate::blocking_client::BlockingBackendClient;
+use crate::blocking_client::BlockingJujutsuInterfaceClient;
 
 pub struct CultivateWorkingCopyFactory {}
 
@@ -58,7 +58,7 @@ impl WorkingCopyFactory for CultivateWorkingCopyFactory {
 pub struct CultivateWorkingCopy {
     store: Arc<Store>,
     working_copy_path: PathBuf,
-    client: BlockingBackendClient,
+    client: BlockingJujutsuInterfaceClient,
     /// Only access through get_checkout_state
     checkout_state: OnceCell<CheckoutState>,
     tree_state: OnceCell<TreeState>,
@@ -75,11 +75,11 @@ impl CultivateWorkingCopy {
         operation_id: OperationId,
         workspace_id: WorkspaceId,
     ) -> Result<Self, WorkingCopyStateError> {
-        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+        let client = BlockingJujutsuInterfaceClient::connect("http://[::1]:10000").unwrap();
         client
-            .set_checkout_state(proto::backend::SetCheckoutStateReq {
+            .set_checkout_state(proto::jj_interface::SetCheckoutStateReq {
                 working_copy_path: working_copy_path.to_str().unwrap().to_string(),
-                checkout_state: Some(proto::backend::CheckoutState {
+                checkout_state: Some(proto::jj_interface::CheckoutState {
                     op_id: operation_id.as_bytes().into(),
                     workspace_id: workspace_id.as_str().into(),
                 }),
@@ -95,7 +95,7 @@ impl CultivateWorkingCopy {
     }
 
     fn load(store: Arc<Store>, working_copy_path: PathBuf) -> Self {
-        let client = BlockingBackendClient::connect("http://[::1]:10000").unwrap();
+        let client = BlockingJujutsuInterfaceClient::connect("http://[::1]:10000").unwrap();
         CultivateWorkingCopy {
             store,
             working_copy_path,

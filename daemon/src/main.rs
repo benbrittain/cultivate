@@ -1,16 +1,8 @@
-use proto::{backend::backend_server::BackendServer, control::control_server::ControlServer};
 use tonic::transport::Server;
 use tracing::info;
 
-mod fs;
-mod service;
-#[macro_use]
-mod content_hash;
-mod mount_store;
-mod repo_manager;
 mod store;
-
-use repo_manager::RepoManager;
+mod service;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -32,14 +24,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("daemon started");
 
-    let store = store::Store::new();
-    let repo_mgr = RepoManager::new(store.clone());
+    let jj_svc = service::JujutsuService::new();
 
-    let control = service::control::ControlService {};
-    let control_svc = ControlServer::new(control);
-
-    let backend = service::backend::BackendService::new(store, repo_mgr);
-    let backend_svc = BackendServer::new(backend);
+    let _store = store::Store::new();
 
     let reflection_svc = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
@@ -48,8 +35,7 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Serving jj gRPC interface");
     Server::builder()
         .add_service(reflection_svc)
-        .add_service(control_svc)
-        .add_service(backend_svc)
+        .add_service(jj_svc)
         .serve(addr)
         .await?;
 

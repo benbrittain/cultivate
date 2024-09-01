@@ -6,6 +6,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .file_descriptor_set_path(out_dir.join("grpc_descriptor.bin"))
-        .compile(&["backend.proto", "control.proto"], &["."])?;
+        .compile(&["jj_interface.proto"], &["."])?;
     Ok(())
 }

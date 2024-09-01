@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package backend;
+package jj_interface;
 
-service Backend {
+service JujutsuInterface {
   // Initalize a new repository
   rpc Initialize(InitializeReq) returns (InitializeReply) {}
 
@@ -154,12 +154,3 @@ message Commit {
   Signature committer = 7;
   optional bytes secure_sig = 9;
 }
-
-//message Conflict {
-//  message Term {
-//    TreeValue content = 1;
-//  }
-//
-//  repeated Term removes = 1;
-//  repeated Term adds = 2;
-//}
